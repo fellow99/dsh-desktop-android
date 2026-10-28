@@ -1,0 +1,13 @@
+[versions]
+agp = "8.10.1"
+kotlin = "2.2.20"
+
+[libraries]
+# 当前外壳零 AndroidX 依赖（WebView 版本门禁经 PackageManager 实现，见 specs/103-webview-shell）。
+# 运行时依赖（经 Maven Central）：
+#   io.github.fellow99:node-bridge:0.2.0   —— JNI 桥（Kotlin API + 引导 JS）
+# 引擎 .so 由 scripts/provision-engine.mjs 投放（不入库），来源 aosp-node-runtime v24.22.1。
+
+[plugins]
+android-application = { id = "com.android.application", version.ref = "agp" }
+kotlin-android = { id = "org.jetbrains.kotlin.android", version.ref = "kotlin" }

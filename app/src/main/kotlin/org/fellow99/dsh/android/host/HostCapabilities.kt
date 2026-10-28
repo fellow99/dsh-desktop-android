@@ -1,0 +1,427 @@
+package org.fellow99.dsh.android.host
+
+import android.app.Application
+import android.app.Notification
+import android.app.NotificationChannel
+import android.app.NotificationManager
+import android.app.PendingIntent
+import android.content.Intent
+import android.os.Build
+import android.os.Environment
+import org.fellow99.dsh.android.BuildConfig
+import org.fellow99.dsh.android.common.AppLog
+import org.fellow99.dsh.android.common.Constants
+import org.fellow99.nodebridge.NodeRuntime
+import org.json.JSONObject
+import java.io.File
+import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.atomic.AtomicLong
+
+/**
+ * 宿主能力面（§6.4 冻结命名的首批子集）。纪律：
+ * - 结构化 JSON 进出、永不抛异常（handler 内 try/catch → {"ok":false,"error":…}）；
+ * - 未注册由桥返回 {"ok":false,"error":"unregistered"}；未实现的能力显式 not-implemented；
+ * - handler 在主线程执行：**只做内存/系统查询，不做阻塞 IO**（大 IO 由 Node 侧 fs 完成）。
+ */
+object HostCapabilities {
+
+    private const val NOTIFY_CHANNEL = "dsh-events"
+
+    @Volatile
+    private var appRef: Application? = null
+
+    /** 两段式槽位（§6.4）：pending → done/expired；5 分钟过期；Activity 恢复时解析。 */
+    private object PendingSlots {
+        enum class State { PENDING, DONE, EXPIRED }
+        class Slot(val kind: String) {
+            @Volatile var state: State = State.PENDING
+            @Volatile var resultJson: String = """{"granted":false}"""
+            val createdAt: Long = System.currentTimeMillis()
+        }
+
+        private val map = ConcurrentHashMap<String, Slot>()
+        private val seq = AtomicLong(0)
+
+        fun create(): String = "slot-${seq.incrementAndGet()}-${System.currentTimeMillis()}".also { map[it] = Slot("allFiles") }
+        fun get(id: String): Slot? {
+            val s = map[id] ?: return null
+            if (s.state == State.PENDING && System.currentTimeMillis() - s.createdAt > 5 * 60_000) s.state = State.EXPIRED
+            return s
+        }
+        fun remove(id: String) { map.remove(id) }
+        fun completeAllFiles(id: String, granted: Boolean) {
+            map[id]?.let {
+                it.resultJson = """{"granted":$granted}"""
+                it.state = State.DONE
+            }
+        }
+
+        fun launchAllFilesSettings(app: Application, id: String) {
+            val intent = Intent(android.provider.Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION)
+                .setData(android.net.Uri.parse("package:${app.packageName}"))
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            app.startActivity(intent)
+            AppLog.line("info", "perm", "launch All-files settings, slot=$id")
+        }
+
+        /** 应用回到前台时解析 pending 的 All-files 槽位（用户从设置页返回）。 */
+        fun onAppResumed(app: Application) {
+            map.values.filter { it.state == State.PENDING && it.kind == "allFiles" }.forEach { slot ->
+                val granted = Build.VERSION.SDK_INT >= 30 && Environment.isExternalStorageManager()
+                if (granted) completeAllFiles(map.entries.firstOrNull { it.value === slot }?.key ?: "", true)
+            }
+        }
+    }
+
+    /** 由 DshApplication 的 ActivityLifecycleCallbacks 在 onActivityResumed 时调用。 */
+    fun onAppResumed(app: Application) {
+        PendingSlots.onAppResumed(app)
+    }
+
+    fun register(app: Application, runtime: NodeRuntime) {
+        appRef = app
+        // 通用回声（联调用）：args 由桥序列化为 JSON 字符串；经 guard 解析后重建，避免拼接非法 JSON
+        runtime.host.register("echo") { args ->
+            guard(args) { json ->
+                """{"ok":true,"echo":$json,"handledBy":"kotlin"}"""
+            }
+        }
+        runtime.host.register("log.write") { args ->
+            guard(args) { json ->
+                val level = json.optString("level", "info")
+                val tag = json.optString("tag", "node")
+                val msg = json.optString("msg", "")
+                AppLog.line(level, tag, msg)
+                """{"ok":true}"""
+            }
+        }
+
+        runtime.host.register("runtime.facts") { _ ->
+            guard("{}") { _ ->
+                facts(app)
+            }
+        }
+
+        // §6.4 perm.allFiles.status（正式能力；store flavor 恒 false）
+        runtime.host.register("perm.allFiles.status") { _ ->
+            guard("{}") { _ ->
+                val granted = BuildConfig.DSH_STORAGE_MODE == "full" &&
+                    Build.VERSION.SDK_INT >= 30 && Environment.isExternalStorageManager()
+                """{"ok":true,"granted":$granted,"sdkInt":${Build.VERSION.SDK_INT},"storageMode":"${BuildConfig.DSH_STORAGE_MODE}"}"""
+            }
+        }
+
+        // [PROBE] P0 门禁 G8 证据：All-files 授权下 Documents/Download 可列可写（探针阶段临时）
+        runtime.host.register("probe.allFiles") { _ ->
+            guard("{}") { _ ->
+                probeAllFiles()
+            }
+        }
+
+        // §6.4 image.normalize：sharp 替身（@dsh-android/attachment-image）的像素操作出口。
+        // 入参/出参契约见 packages/attachment-image-android（data=base64 → {ok,data,format,width,height}）。
+        runtime.host.register("image.normalize") { args ->
+            guard(args) { json ->
+                imageNormalize(json)
+            }
+        }
+
+        // §6.4 两段式（P2）：perm.request —— 跳系统设置页（All-files），立即返回 pending，
+        // 用户授权后回到应用时由 onAppResumed() 解析槽位；客户端经 host.result 轮询。
+        runtime.host.register("perm.request") { args ->
+            guard(args) { json ->
+                val names = json.optJSONArray("names")
+                val wantsAllFiles = (0 until (names?.length() ?: 0)).any {
+                    val n = names?.optString(it, "") ?: ""
+                    n.contains("allFiles", true) || n.contains("EXTERNAL_STORAGE", true) ||
+                        n.contains("DOCUMENTS", true) || n.contains("DOWNLOAD", true) || n.contains("DESKTOP", true)
+                } || names == null
+                if (!wantsAllFiles) {
+                    """{"ok":false,"error":"not-implemented","hint":"仅支持 All-files 类权限请求"}"""
+                } else if (Build.VERSION.SDK_INT >= 30 && Environment.isExternalStorageManager()) {
+                    """{"ok":true,"granted":true}"""
+                } else {
+                    val id = PendingSlots.create()
+                    PendingSlots.launchAllFilesSettings(app, id)
+                    """{"ok":true,"pending":true,"id":"$id"}"""
+                }
+            }
+        }
+
+        // §6.4 两段式：结果查询（只读内存槽位表；5 分钟过期）
+        runtime.host.register("host.result") { args ->
+            guard(args) { json ->
+                val id = json.optString("id", "")
+                val slot = PendingSlots.get(id) ?: return@guard """{"ok":true,"state":"expired"}"""
+                when (slot.state) {
+                    PendingSlots.State.PENDING -> """{"ok":true,"state":"pending"}"""
+                    PendingSlots.State.DONE -> {
+                        PendingSlots.remove(id)
+                        """{"ok":true,"state":"done","result":${slot.resultJson}}"""
+                    }
+                    PendingSlots.State.EXPIRED -> {
+                        PendingSlots.remove(id)
+                        """{"ok":true,"state":"expired"}"""
+                    }
+                }
+            }
+        }
+
+        // §6.4 perm.check：{name} → {granted}（All-files 语义名 → isExternalStorageManager）
+        runtime.host.register("perm.check") { args ->
+            guard(args) { json ->
+                val granted = Build.VERSION.SDK_INT >= 30 && Environment.isExternalStorageManager()
+                """{"ok":true,"granted":$granted,"name":${JSONObject.quote(json.optString("name", ""))}}"""
+            }
+        }
+
+        // §6.4 notify.show：channel dsh-events；POST_NOTIFICATIONS（33+）缺失时如实失败
+        runtime.host.register("notify.show") { args ->
+            guard(args) { json ->
+                notifyShow(json)
+            }
+        }
+
+        // §6.4 shell.openExternal：https/http → ACTION_VIEW；file URI 等如实降级（P3 FileProvider 路线）
+        runtime.host.register("shell.openExternal") { args ->
+            guard(args) { json ->
+                val uri = json.optString("uri", "")
+                val parsed = android.net.Uri.parse(uri)
+                if (parsed.scheme == "https" || parsed.scheme == "http") {
+                    val intent = Intent(Intent.ACTION_VIEW, parsed).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    app.startActivity(intent)
+                    """{"ok":true}"""
+                } else {
+                    """{"ok":false,"error":"not-implemented","hint":"openExternal 当前仅支持 https/http；工作区文件外打开属 P3（FileProvider 路线）"}"""
+                }
+            }
+        }
+
+        runtime.host.register("shutdown") { _ ->
+            """{"ok":true,"note":"shutdown 钩子已注册（真正的停止只能是进程退出）"}"""
+        }
+    }
+
+    /** handler 包装：任何异常 → {"ok":false,"error":…}，绝不向桥抛出。 */
+    private inline fun guard(argsJson: String, block: (JSONObject) -> String): String =
+        try {
+            block(JSONObject(argsJson))
+        } catch (t: Throwable) {
+            val err = JSONObject()
+            err.put("ok", false)
+            err.put("error", "${t.javaClass.simpleName}: ${t.message}")
+            err.toString()
+        }
+
+    private fun facts(app: Application): String {
+        val filesDir = app.filesDir
+        val o = JSONObject()
+        o.put("app", JSONObject().apply {
+            put("versionName", BuildConfig.VERSION_NAME)
+            put("versionCode", BuildConfig.VERSION_CODE)
+            put("applicationId", BuildConfig.APPLICATION_ID)
+            put("flavor", BuildConfig.FLAVOR)
+        })
+        o.put("platform", JSONObject().apply {
+            put("sdkInt", Build.VERSION.SDK_INT)
+            put("release", Build.VERSION.RELEASE)
+            put("abi", Build.SUPPORTED_ABIS.firstOrNull() ?: "unknown")
+            put("model", Build.MODEL)
+        })
+        o.put("paths", JSONObject().apply {
+            put("filesDir", filesDir.absolutePath)
+            put("dshHome", File(filesDir, Constants.DIR_DSH_HOME).absolutePath)
+            put("payloadRoot", File(filesDir, Constants.DIR_PAYLOAD).absolutePath)
+            put("workspace", File(filesDir, Constants.DIR_WORKSPACE).absolutePath)
+            put("userRoot", Environment.getExternalStorageDirectory().absolutePath)
+        })
+        o.put("storageMode", BuildConfig.DSH_STORAGE_MODE)
+        o.put("ok", true) // FR-CAP-1：所有能力响应统一带 ok 字段
+        return o.toString()
+    }
+
+    /**
+     * image.normalize：base64 输入 → 有界解码（inSampleSize 采样）→ EXIF 纠偏 →
+     * fit-inside 缩放（不放大）→ 目标格式压缩 → base64 输出。
+     * 纪律：主线程内联执行，用 bounds-first 采样把典型耗时压到秒级；两段式异步属 P2（specs/104）。
+     */
+    private fun imageNormalize(json: JSONObject): String {
+        val dataB64 = json.optString("data", "")
+        if (dataB64.isEmpty()) return err("data 为空")
+        // 桥 capBytes 默认 8 MiB（NodeRuntimeOptions）；留出信封余量，输入 base64 上限 8 MB（原始约 6 MB）。
+        // 更大图片与异步预算（>10s）走 P2 两段式（specs/104）。
+        if (dataB64.length > 8_000_000) return err("图片过大（base64 ${dataB64.length} > 8_000_000）")
+        val input = try {
+            android.util.Base64.decode(dataB64, android.util.Base64.DEFAULT)
+        } catch (t: Throwable) {
+            return err("base64 解码失败：${t.message}")
+        }
+        val format = json.optString("format", "jpeg").lowercase()
+        val quality = json.optInt("quality", 85).coerceIn(1, 100)
+        val targetW = if (json.has("width") && json.optInt("width") > 0) json.optInt("width") else Int.MAX_VALUE
+        val targetH = if (json.has("height") && json.optInt("height") > 0) json.optInt("height") else Int.MAX_VALUE
+        val withoutEnlargement = json.optBoolean("withoutEnlargement", true)
+        val extraRotate = json.optBoolean("rotate", false)
+
+        // ① bounds 采样
+        val bounds = android.graphics.BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        android.graphics.BitmapFactory.decodeByteArray(input, 0, input.size, bounds)
+        if (bounds.outWidth <= 0 || bounds.outHeight <= 0) return err("无法解码图片（w=${bounds.outWidth},h=${bounds.outHeight}）")
+        val sample = android.graphics.BitmapFactory.Options().apply {
+            inSampleSize = computeInSampleSize(bounds.outWidth, bounds.outHeight, targetW, targetH)
+            inPreferredConfig = android.graphics.Bitmap.Config.ARGB_8888
+        }
+        var bitmap = android.graphics.BitmapFactory.decodeByteArray(input, 0, input.size, sample)
+            ?: return err("解码失败")
+
+        // ② EXIF 纠偏（JPEG）
+        if (bounds.outMimeType?.contains("jpeg") == true) {
+            val exif = runCatching { android.media.ExifInterface(java.io.ByteArrayInputStream(input)) }.getOrNull()
+            val orientation = exif?.getAttributeInt(
+                android.media.ExifInterface.TAG_ORIENTATION,
+                android.media.ExifInterface.ORIENTATION_NORMAL,
+            ) ?: android.media.ExifInterface.ORIENTATION_NORMAL
+            val degrees = when (orientation) {
+                android.media.ExifInterface.ORIENTATION_ROTATE_90 -> 90f
+                android.media.ExifInterface.ORIENTATION_ROTATE_180 -> 180f
+                android.media.ExifInterface.ORIENTATION_ROTATE_270 -> 270f
+                else -> 0f
+            }
+            if (degrees != 0f) {
+                val m = android.graphics.Matrix().apply { postRotate(degrees) }
+                val rotated = android.graphics.Bitmap.createBitmap(bitmap, 0, 0, bitmap.width, bitmap.height, m, true)
+                if (rotated != bitmap) bitmap.recycle()
+                bitmap = rotated
+            }
+        }
+        // 显式 rotate 请求（sharp 语义：顺时针 90°）
+        if (extraRotate) {
+            val m = android.graphics.Matrix().apply { postRotate(90f) }
+            val rotated = android.graphics.Bitmap.createBitmap(bitmap, 0, 0, bitmap.width, bitmap.height, m, true)
+            if (rotated != bitmap) bitmap.recycle()
+            bitmap = rotated
+        }
+
+        // ③ fit-inside 缩放（不放大）
+        val w = bitmap.width
+        val h = bitmap.height
+        val ratio = minOf(
+            if (targetW != Int.MAX_VALUE) targetW.toFloat() / w else Float.POSITIVE_INFINITY,
+            if (targetH != Int.MAX_VALUE) targetH.toFloat() / h else Float.POSITIVE_INFINITY,
+        )
+        val scale = if (withoutEnlargement) minOf(1f, ratio) else if (ratio.isFinite()) ratio else 1f
+        if (scale < 0.999f) {
+            val scaled = android.graphics.Bitmap.createScaledBitmap(
+                bitmap,
+                Math.max(1, Math.round(w * scale)),
+                Math.max(1, Math.round(h * scale)),
+                true,
+            )
+            if (scaled != bitmap) bitmap.recycle()
+            bitmap = scaled
+        }
+
+        // ④ 压缩
+        val compressFormat = when (format) {
+            "png" -> android.graphics.Bitmap.CompressFormat.PNG
+            "webp" -> if (Build.VERSION.SDK_INT >= 30) android.graphics.Bitmap.CompressFormat.WEBP_LOSSY else android.graphics.Bitmap.CompressFormat.WEBP
+            else -> android.graphics.Bitmap.CompressFormat.JPEG
+        }
+        val out = java.io.ByteArrayOutputStream()
+        val ok = bitmap.compress(compressFormat, quality, out)
+        val outW = bitmap.width
+        val outH = bitmap.height
+        bitmap.recycle()
+        if (!ok) return err("压缩失败（format=$format）")
+
+        val o = JSONObject()
+        o.put("ok", true)
+        o.put("data", android.util.Base64.encodeToString(out.toByteArray(), android.util.Base64.NO_WRAP))
+        o.put("format", format)
+        o.put("width", outW)
+        o.put("height", outH)
+        return o.toString()
+    }
+
+    private fun computeInSampleSize(width: Int, height: Int, targetW: Int, targetH: Int): Int {
+        var sample = 1
+        if (width <= 0 || height <= 0) return 1
+        val halfW = width / 2
+        val halfH = height / 2
+        val limitW = if (targetW == Int.MAX_VALUE) width else targetW
+        val limitH = if (targetH == Int.MAX_VALUE) height else targetH
+        while (halfW / sample >= limitW && halfH / sample >= limitH) {
+            sample *= 2
+        }
+        return sample
+    }
+
+    private fun notifyShow(json: JSONObject): String {
+        val app = appRef ?: return err("app 未初始化")
+        if (Build.VERSION.SDK_INT >= 33) {
+            val nm = app.getSystemService(NotificationManager::class.java)
+            if (nm?.areNotificationsEnabled() != true) {
+                val o = JSONObject()
+                o.put("ok", false)
+                o.put("error", "notification-permission-missing")
+                o.put("hint", "请在系统设置中允许通知（POST_NOTIFICATIONS）")
+                return o.toString()
+            }
+        }
+        val channel = NotificationChannel(NOTIFY_CHANNEL, "DSH 事件", NotificationManager.IMPORTANCE_DEFAULT).also {
+            app.getSystemService(NotificationManager::class.java)?.createNotificationChannel(it)
+        }
+        val launch = app.packageManager.getLaunchIntentForPackage(app.packageName)
+        val pi = PendingIntent.getActivity(app, 0, launch, PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
+        val title = json.optString("title", "DSH")
+        val text = json.optString("text", "")
+        val notification = Notification.Builder(app, NOTIFY_CHANNEL)
+            .setSmallIcon(android.R.drawable.ic_dialog_info)
+            .setContentTitle(title)
+            .setContentText(text)
+            .setStyle(Notification.BigTextStyle().bigText(text))
+            .setContentIntent(pi)
+            .setAutoCancel(true)
+            .build()
+        val nm = app.getSystemService(NotificationManager::class.java) ?: return err("NotificationManager 不可用")
+        nm.notify(json.optInt("id", 1001), notification)
+        AppLog.line("info", "notify", "shown: $title")
+        return """{"ok":true}"""
+    }
+
+    private fun err(message: String): String {
+        val o = JSONObject()
+        o.put("ok", false)
+        o.put("error", message)
+        o.put("hint", "image.normalize 仅支持有界重采样 + jpeg/png/webp 重编码（specs/104）；EXIF 纠偏仅 JPEG")
+        return o.toString()
+    }
+
+    private fun probeAllFiles(): String {
+        val o = JSONObject()
+        val sdkInt = Build.VERSION.SDK_INT
+        o.put("sdkInt", sdkInt)
+        val granted = Build.VERSION.SDK_INT >= 30 && Environment.isExternalStorageManager()
+        o.put("granted", granted)
+        o.put("userRoot", Environment.getExternalStorageDirectory().absolutePath)
+        val tried = JSONObject()
+        for (name in listOf("Documents", "Download")) {
+            val dir = File(Environment.getExternalStorageDirectory(), name)
+            val r = JSONObject()
+            try {
+                r.put("exists", dir.exists())
+                r.put("listable", dir.isDirectory && dir.list() != null)
+                val probe = File(dir, ".dsh-probe-${System.currentTimeMillis()}.txt")
+                probe.writeText("dsh-android-probe")
+                val readBack = probe.readText() == "dsh-android-probe"
+                probe.delete()
+                r.put("writable", readBack)
+            } catch (t: Throwable) {
+                r.put("error", "${t.javaClass.simpleName}: ${t.message}")
+            }
+            tried.put(name, r)
+        }
+        o.put("dirs", tried)
+        return o.toString()
+    }
+}

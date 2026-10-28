@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- 外壳 chrome 配色（页面主题由 dsh 前端自行响应式） -->
+    <color name="dsh_bg">#0F1115</color>
+    <color name="dsh_fg">#E8EAED</color>
+    <color name="dsh_fg_dim">#9AA0A6</color>
+    <color name="dsh_accent">#4B8BFF</color>
+    <color name="dsh_error">#FF6B6B</color>
+</resources>

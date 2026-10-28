@@ -33,3 +33,11 @@ google-services.json
 
 # Android Profiling
 *.hprof
+
+# ── dsh-desktop-android：二进制不入库（docs/000-工程规划.md §13）─────────────
+# 引擎（libnode.so / libc++_shared.so，由 scripts/provision-engine.mjs 投放）
+app/src/main/jniLibs/
+# 载荷产物（由 scripts/package-payload.mjs 生成）
+app/src/main/assets/dsh-payload/
+# Node 侧依赖与构建中间物
+node_modules/

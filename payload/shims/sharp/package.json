@@ -1,0 +1,9 @@
+{
+  "name": "sharp",
+  "version": "0.0.0-android-s2",
+  "type": "commonjs",
+  "main": "index.cjs",
+  "description": "Android shim S2: pure-JS sharp replacement delegating pixel work to the host bridge image.normalize.",
+  "license": "MIT",
+  "dshAndroidShim": "S2"
+}

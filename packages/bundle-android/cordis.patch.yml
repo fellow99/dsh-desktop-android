@@ -1,0 +1,127 @@
+# @dsh-android/bundle —— Android 适配层（叠加在 dsh-base 与 dsh-web-app 之后）。
+#
+# 只允许三类操作（见 specs/105-upstream-adapter-bundle/spec.md）：
+#   1) 按 id 禁用上游行；
+#   2) 按 id 覆盖上游行的 config；
+#   3) 插入本工程提供的行。
+# 不允许复制上游行内容，也不允许改写上游源码。
+#
+# P1（000-scaffold 阶段）登记的能力边界（宪法 C2：诚实降级，不假装存在）：
+#   - subprocess/sandbox/shell/open-in-app/workspace-picker/notify/facts/market/git/fs-search
+#     的 @dsh-android/* 实现属 P2/P3；本层先如实禁用对应上游行，
+#     待插件落地后以 insert 行启用（届时删除对应 disabled 行）。
+
+# ── 配置热重载：设备上无意义，且增加 fs 压力 ────────────────────────────────
+- id: hmr
+  disabled: true
+
+# ── 进程/命令/沙箱：插入 @dsh-android/* 提供方（P2 提前，P1 会话创建必需）。
+#    上游 `subprocess`（spawn node 子进程，Android 无第二个 node 可执行）与
+#    `sandbox`（内核隔离面，Android 无 landlock）按规划禁用；
+#    Android 提供方：spawn 只允许 /system/bin/* 与工作区脚本；shell 为
+#    常驻 /system/bin/sh 哨兵协议；sandbox 为策略层（如实上报无隔离）。
+- id: subprocess
+  disabled: true
+
+- id: sandbox
+  disabled: true
+
+- id: bash-sandbox
+  disabled: true
+
+- id: pwsh-sandbox
+  disabled: true
+
+- insert:
+    - id: subprocess-android
+      name: '@dsh-android/subprocess'
+    - id: sandbox-android
+      name: '@dsh-android/sandbox'
+    - id: shell-android
+      name: '@dsh-android/shell'
+      config:
+        timeoutMs: 120000
+        shellPath: /system/bin/sh
+
+# 策略层保留（纯配置）；workspaceRoot 必须显式覆盖：上游默认 process.cwd()（载荷根），
+# 本工程的可写根由 Kotlin 经 env 下发。
+- id: sandbox-policy
+  config:
+    # 与上游 approval 行同源：避免「策略 workspace-write + 审批 never」的矛盾组合。
+    mode: !!js process.env.DSH_PERMISSION_MODE ?? 'workspace-write'
+    workspaceRoot: !!js process.env.DSH_ANDROID_WORKSPACE
+
+- id: terminal-controller
+  disabled: true
+
+# 客户端面连带：ui-sidebar-terminal 等待 webTerminals（来自 terminal-controller）
+- id: ui-sidebar-terminal
+  disabled: true
+
+# ── 目录选择：禁用 auto（它会动态挂载客户端面），改为**静态钉住上游 -browse**
+#    （上游注释明确支持在 overlay 中直接挂 -browse；提供 list/createDirectory 原语，
+#    足以完成 P1 的工作区创建；三+一主目录 workspace-picker 属 P2/specs/106）。
+- id: directory-picker
+  disabled: true
+
+# ── 外部打开：@dsh-android/open-in-app（Intent ACTION_VIEW + FileProvider）属 P2。
+- id: open-in-app
+  disabled: true
+
+- insert:
+    # 工作区选择（P2）：三+一主目录、根围栏、权限门（自实现原语，不委派 browse）
+    - id: workspace-picker-client
+      name: '@dsh-android/workspace-picker-client'
+    - id: workspace-picker
+      name: '@dsh-android/workspace-picker'
+      config:
+        sandboxRoot: !!js process.env.DSH_ANDROID_WORKSPACE
+        userRoot: !!js process.env.DSH_USER_ROOT
+        roots:
+          - documents
+          - download
+    # 通知（P2）：审批/失败/完成三类，channel dsh-events
+    - id: notify
+      name: '@dsh-android/notify'
+    # 诊断（P2）：/_android/facts，默认关闭
+    - id: facts
+      name: '@dsh-android/facts'
+      config:
+        enabled: false
+    # 外部打开（P2）：宿主桥 shell.openExternal（Intent ACTION_VIEW）
+    - id: open-in-app-android
+      name: '@dsh-android/open-in-app'
+      config:
+        probeTimeoutMs: 10000
+        iconTimeoutMs: 10000
+        launchWatchMs: 1000
+    # GIT（P3）：isomorphic-git 闭包随包（packages/git-android/node_modules 内置）
+    - id: git
+      name: '@dsh-android/git'
+    # 市场（P3）：desktopProfiles/desktopPnpm 契约 + 随包 pnpm 引擎
+    - id: market-android
+      name: '@dsh-android/market'
+
+# ── 审批预设：需要"可隔离的执行器"（ctx.shell.sandboxMode 非空）。
+#    Android 没有内核隔离，执行器如实不声明 sandboxMode；上游 permission-presets
+#    会把这种组合判为误配置 ⇒ 明确禁用，而不是伪造一个 sandboxMode（宪法 C2）。
+- id: permission
+  disabled: true
+
+# 权限预设的客户端面：宿主行已禁用，客户端卡片仍会调
+# /api/permissionPresets/catalog ⇒ 设置页出现必然 404 的卡片。
+# 平台没有内核隔离，如实不提供这个入口（宪法 C2 / C14）。
+- id: ui-permission
+  disabled: true
+
+# ── 品牌与首次引导：按本产品身份交付，不把上游的预览提示与官方引导带给用户 ────────
+- id: ui-settings-general
+  config:
+    welcomeNoticeVersion: '2026-09-28.1'
+
+- id: ui-settings-models
+  config:
+    credentialOnboarding: false
+
+- id: ui-brand-official
+  disabled: true
