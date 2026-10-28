@@ -78,6 +78,21 @@ class KeepAliveService : Service() {
         return START_NOT_STICKY
     }
 
+    /**
+     * dataSync 前台服务在 API 35+ 有 6h/24h 硬限时：超时系统会抛
+     * ForegroundServiceDidNotStopInTimeException（崩溃）。超时 = 正常路径的 stop 丢失
+     * （如 JS 侧异常），此处主动 stopSelf 把崩溃转为如实降级（specs/109 纪律：结束即停）。
+     */
+    override fun onTimeout(startId: Int) {
+        AppLog.line("warn", "keepalive", "FGS timeout (dataSync); stopping to avoid system crash")
+        stopSelf()
+    }
+
+    override fun onTimeout(startId: Int, fgsType: Int) {
+        AppLog.line("warn", "keepalive", "FGS timeout (type=$fgsType); stopping to avoid system crash")
+        stopSelf()
+    }
+
     private fun buildNotification(): Notification {
         val title = getString(R.string.keepalive_title)
         val text = getString(R.string.keepalive_text)

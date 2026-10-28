@@ -191,5 +191,16 @@ export function apply(ctx, config = {}) {
     // Never answer the approval here: the composed answerer chain owns it.
     return next()
   })
+
+  // specs/109 收口：插件随宿主 teardown 时，若仍有 running 引用（会话异常终止不发 idle），
+  // 强制释放前台服务，避免 dataSync FGS 孤儿（API 35+ 会顶到 6h 硬限时）。
+  ctx.on('dispose', () => {
+    if (keepAliveRefs > 0) {
+      keepAliveRefs = 0
+      invokeHost('power.keepAwake', { enable: false }, { timeoutMs: NOTIFY_TIMEOUT_MS }).catch(error => {
+        logFailure(ctx, `power.keepAwake dispose failed: ${error instanceof Error ? error.message : String(error)}`)
+      })
+    }
+  })
 }
 

@@ -46,10 +46,15 @@ object HostCapabilities {
             "slot-${seq.incrementAndGet()}-${System.currentTimeMillis()}".also { map[it] = Slot(kind) }
         fun get(id: String): Slot? {
             val s = map[id] ?: return null
-            if (s.state == State.PENDING && System.currentTimeMillis() - s.createdAt > 5 * 60_000) s.state = State.EXPIRED
+            // TTL 按 kind 区分：perm 设置页往返 5 分钟；SAF 选文件（浏览/多选/重命名）放宽到 15 分钟
+            val ttlMs = if (s.kind == "pickFiles" || s.kind == "saveFile") 15 * 60_000 else 5 * 60_000
+            if (s.state == State.PENDING && System.currentTimeMillis() - s.createdAt > ttlMs) s.state = State.EXPIRED
             return s
         }
         fun remove(id: String) { map.remove(id) }
+
+        /** 原子取走（防并发轮询双消费同一结果）。 */
+        fun take(id: String): Slot? = map.remove(id)
         fun completeAllFiles(id: String, granted: Boolean) {
             map[id]?.let {
                 it.resultJson = """{"granted":$granted}"""
@@ -60,6 +65,9 @@ object HostCapabilities {
         /** 通用完成入口（SAF 委托页回调等）：任意 kind 槽位写入结果并置 DONE。 */
         fun complete(id: String, resultJson: String) {
             map[id]?.let {
+                if (it.state == State.EXPIRED) {
+                    AppLog.line("warn", "slot", "complete on EXPIRED slot id=$id kind=${it.kind}（结果丢弃）")
+                }
                 it.resultJson = resultJson
                 it.state = State.DONE
             }
@@ -162,21 +170,18 @@ object HostCapabilities {
             }
         }
 
-        // §6.4 两段式：结果查询（只读内存槽位表；5 分钟过期）
+        // §6.4 两段式：结果查询（只读内存槽位表；TTL 按 kind：perm 5min / SAF 15min）
         runtime.host.register("host.result") { args ->
             guard(args) { json ->
                 val id = json.optString("id", "")
-                val slot = PendingSlots.get(id) ?: return@guard """{"ok":true,"state":"expired"}"""
+                val slot = PendingSlots.take(id) ?: return@guard """{"ok":true,"state":"expired"}"""
                 when (slot.state) {
-                    PendingSlots.State.PENDING -> """{"ok":true,"state":"pending"}"""
-                    PendingSlots.State.DONE -> {
-                        PendingSlots.remove(id)
-                        """{"ok":true,"state":"done","result":${slot.resultJson}}"""
+                    PendingSlots.State.PENDING -> {
+                        PendingSlots.complete(id, slot.resultJson) // 放回（仍 pending）
+                        """{"ok":true,"state":"pending"}"""
                     }
-                    PendingSlots.State.EXPIRED -> {
-                        PendingSlots.remove(id)
-                        """{"ok":true,"state":"expired"}"""
-                    }
+                    PendingSlots.State.DONE -> """{"ok":true,"state":"done","result":${slot.resultJson}}"""
+                    PendingSlots.State.EXPIRED -> """{"ok":true,"state":"expired"}"""
                 }
             }
         }
@@ -236,8 +241,31 @@ object HostCapabilities {
                 val isImage = clip.description?.hasMimeType("image/*") == true ||
                     (uri != null && app.contentResolver.getType(uri)?.startsWith("image/") == true)
                 if (!isImage || uri == null) return@guard """{"ok":false,"error":"clipboard-not-image"}"""
-                val bytes = app.contentResolver.openInputStream(uri)?.use { it.readBytes() }
-                    ?: return@guard """{"ok":false,"error":"clipboard-read-failed"}"""
+                // 尺寸门：>6MiB 的原始字节加 base64 膨胀必超桥 capBytes 8MiB，先查大小再读，避免做完再失败/OOM
+                var size = -1L
+                app.contentResolver.query(uri, null, null, null, null)?.use { c ->
+                    val idx = c.getColumnIndex(android.provider.OpenableColumns.SIZE)
+                    if (idx >= 0 && c.moveToFirst() && !c.isNull(idx)) size = c.getLong(idx)
+                }
+                if (size > 6_000_000) return@guard """{"ok":false,"error":"image-too-large","hint":"剪贴板图片 >6MB（base64 后超桥 8MiB 上限）"}"""
+                val bytes = if (size >= 0) {
+                    app.contentResolver.openInputStream(uri)?.use { input ->
+                        val buffer = java.io.ByteArrayOutputStream()
+                        val chunk = ByteArray(64 * 1024)
+                        var total = 0
+                        while (true) {
+                            val n = input.read(chunk)
+                            if (n < 0) break
+                            total += n
+                            if (total > 6_000_000) return@guard """{"ok":false,"error":"image-too-large","hint":"剪贴板图片 >6MB（base64 后超桥 8MiB 上限）"}"""
+                            buffer.write(chunk, 0, n)
+                        }
+                        buffer.toByteArray()
+                    } ?: return@guard """{"ok":false,"error":"clipboard-read-failed"}"""
+                } else {
+                    app.contentResolver.openInputStream(uri)?.use { it.readBytes() }
+                        ?: return@guard """{"ok":false,"error":"clipboard-read-failed"}"""
+                }
                 val mime = app.contentResolver.getType(uri) ?: "image/png"
                 val data = android.util.Base64.encodeToString(bytes, android.util.Base64.NO_WRAP)
                 val o = org.json.JSONObject()
@@ -279,21 +307,29 @@ object HostCapabilities {
             }
         }
 
-        // §6.4 fs.saveFile：SAF ACTION_CREATE_DOCUMENT，两段式（P2-3）；data(base64)/text 先暂存，选中目标后写入
+        // §6.4 fs.saveFile：SAF ACTION_CREATE_DOCUMENT，两段式（P2-3）；data(base64)/text 先暂存，选中目标后写入。
+        // base64 解码 + 落盘放后台线程（主线程不做阻塞 IO）；槽位先建、委托页先起（用户浏览目录的时间足够暂存完成）
         runtime.host.register("fs.saveFile") { args ->
             guard(args) { json ->
                 val app = appRef ?: return@guard err("app 未初始化")
                 val dataB64 = json.optString("data", "")
                 val text = json.optString("text", "")
                 if (dataB64.isEmpty() && text.isEmpty()) return@guard err("data/text 均为空")
-                val bytes = if (dataB64.isNotEmpty()) {
-                    android.util.Base64.decode(dataB64, android.util.Base64.DEFAULT)
-                } else {
-                    text.toByteArray(Charsets.UTF_8)
-                }
-                val staged = File(app.cacheDir, "save-stage-${System.currentTimeMillis()}.bin")
-                staged.writeBytes(bytes)
                 val id = PendingSlots.create("saveFile")
+                val staged = File(app.cacheDir, "save-stage-${System.currentTimeMillis()}.bin")
+                Thread {
+                    try {
+                        val bytes = if (dataB64.isNotEmpty()) {
+                            android.util.Base64.decode(dataB64, android.util.Base64.DEFAULT)
+                        } else {
+                            text.toByteArray(Charsets.UTF_8)
+                        }
+                        staged.writeBytes(bytes)
+                    } catch (t: Throwable) {
+                        AppLog.line("warn", "saf", "stage write failed: ${t.javaClass.simpleName}: ${t.message}")
+                        HostCapabilities.completeSlot(id, """{"ok":false,"error":"stage-write-failed"}""")
+                    }
+                }.start()
                 val intent = android.content.Intent(app, PickDelegateActivity::class.java)
                     .putExtra(PickDelegateActivity.EXTRA_MODE, "saveFile")
                     .putExtra(PickDelegateActivity.EXTRA_SLOT, id)
@@ -483,7 +519,8 @@ object HostCapabilities {
         val launch = app.packageManager.getLaunchIntentForPackage(app.packageName)
         val pi = PendingIntent.getActivity(app, 0, launch, PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
         val title = json.optString("title", "DSH")
-        val text = json.optString("text", "")
+        // JS 侧（notify-android）发的是 body；兼容历史 text 字段
+        val text = if (json.has("body")) json.optString("body", "") else json.optString("text", "")
         val notification = Notification.Builder(app, NOTIFY_CHANNEL)
             .setSmallIcon(android.R.drawable.ic_dialog_info)
             .setContentTitle(title)
@@ -498,11 +535,11 @@ object HostCapabilities {
         return """{"ok":true}"""
     }
 
-    private fun err(message: String): String {
+    private fun err(message: String, hint: String? = null): String {
         val o = JSONObject()
         o.put("ok", false)
         o.put("error", message)
-        o.put("hint", "image.normalize 仅支持有界重采样 + jpeg/png/webp 重编码（specs/104）；EXIF 纠偏仅 JPEG")
+        if (hint != null) o.put("hint", hint)
         return o.toString()
     }
 

@@ -35,11 +35,24 @@ export const FACTS_PATH = '/_android/facts'
 /** Credential-shaped names that must never appear in the payload. */
 export const SENSITIVE_ENV_PATTERN = /TOKEN|KEY|SECRET|PASSWORD|AUTH|COOKIE|CREDENTIAL|SESSION/i
 
-/** Host capabilities that are implemented in this build (`HostCapabilities.ets:189-195`). */
-export const IMPLEMENTED_CAPABILITIES = Object.freeze(HOST_CAPABILITIES.slice(0, 6))
+/**
+ * Host capabilities actually registered by this build's Kotlin `HostCapabilities`
+ * （app/src/main/kotlin/.../host/HostCapabilities.kt::register）——**手工维护**，
+ * 新增/解禁能力时同步此名单（对齐 C2：平台真相不隐藏，不用切片猜测）。
+ * 未列出的冻结名即 `not-implemented` 占位（桥返回 unregistered/占位响应）。
+ */
+export const IMPLEMENTED_CAPABILITIES = Object.freeze([
+  'runtime.facts', 'perm.check', 'perm.request', 'perm.allFiles.status',
+  'host.result', 'notify.show', 'shell.openExternal', 'image.normalize',
+  'log.write', 'echo', 'shutdown', 'probe.allFiles',
+  'clipboard.writeText', 'clipboard.readImage', 'power.keepAwake',
+  'fs.pickFiles', 'fs.saveFile',
+])
 
-/** Host capabilities registered as `not-implemented` placeholders. */
-export const PLACEHOLDER_CAPABILITIES = Object.freeze(HOST_CAPABILITIES.slice(6))
+/** Host capabilities in the frozen face that this build does NOT register. */
+export const PLACEHOLDER_CAPABILITIES = Object.freeze(
+  HOST_CAPABILITIES.filter((name) => !(IMPLEMENTED_CAPABILITIES).includes(name)),
+)
 
 function messageOf(error) {
   return error instanceof Error ? error.message : String(error)

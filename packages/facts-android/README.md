@@ -25,7 +25,7 @@ export function apply(ctx, config) { … }
 | `env` | 仅 **非敏感** 的 `DSH_ANDROID_*` 值 |
 | `redactedEnv` | 被过滤掉的敏感 `DSH_ANDROID_*` 名字（只列名字） |
 | `shims` | 垫片标记：`DSH_ANDROID_SHIMS`（逗号分隔）或 `globalThis.__DSH_ANDROID_SHIMS__`；两者都没有时 `markers: []` + `source:'unavailable'` + 说明 |
-| `capabilities` | `sandbox:'none'`、`pty:false`、`kernelIsolation:false`、附件能力、宿主桥能力清单（前 6 项 implemented / 后 8 项 placeholder） |
+| `capabilities` | `sandbox:'none'`、`pty:false`、`kernelIsolation:false`、附件能力、宿主桥能力清单（implemented 名单手工维护于 lib/index.js IMPLEMENTED_CAPABILITIES，2026-10-29 起含 clipboard/power/fs 五项） |
 | `honesty` | 明确写出“绝不输出 token”和“诊断用途、发布默认关闭” |
 
 **绝不输出 token**：只读 `DSH_ANDROID_*` 前缀，且匹配 `TOKEN|KEY|SECRET|PASSWORD|AUTH|COOKIE|CREDENTIAL|SESSION` 的名字只出现在 `redactedEnv` 名单里，值不读取、不输出。
