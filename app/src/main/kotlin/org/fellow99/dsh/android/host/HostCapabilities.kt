@@ -42,7 +42,8 @@ object HostCapabilities {
         private val map = ConcurrentHashMap<String, Slot>()
         private val seq = AtomicLong(0)
 
-        fun create(): String = "slot-${seq.incrementAndGet()}-${System.currentTimeMillis()}".also { map[it] = Slot("allFiles") }
+        fun create(kind: String = "allFiles"): String =
+            "slot-${seq.incrementAndGet()}-${System.currentTimeMillis()}".also { map[it] = Slot(kind) }
         fun get(id: String): Slot? {
             val s = map[id] ?: return null
             if (s.state == State.PENDING && System.currentTimeMillis() - s.createdAt > 5 * 60_000) s.state = State.EXPIRED
@@ -52,6 +53,14 @@ object HostCapabilities {
         fun completeAllFiles(id: String, granted: Boolean) {
             map[id]?.let {
                 it.resultJson = """{"granted":$granted}"""
+                it.state = State.DONE
+            }
+        }
+
+        /** 通用完成入口（SAF 委托页回调等）：任意 kind 槽位写入结果并置 DONE。 */
+        fun complete(id: String, resultJson: String) {
+            map[id]?.let {
+                it.resultJson = resultJson
                 it.state = State.DONE
             }
         }
@@ -76,6 +85,11 @@ object HostCapabilities {
     /** 由 DshApplication 的 ActivityLifecycleCallbacks 在 onActivityResumed 时调用。 */
     fun onAppResumed(app: Application) {
         PendingSlots.onAppResumed(app)
+    }
+
+    /** SAF 委托页回调入口：完成任意槽位（host.result 轮询方随后取走结果）。 */
+    fun completeSlot(id: String, resultJson: String) {
+        PendingSlots.complete(id, resultJson)
     }
 
     fun register(app: Application, runtime: NodeRuntime) {
@@ -194,6 +208,101 @@ object HostCapabilities {
                 } else {
                     """{"ok":false,"error":"not-implemented","hint":"openExternal 当前仅支持 https/http；工作区文件外打开属 P3（FileProvider 路线）"}"""
                 }
+            }
+        }
+
+        // §6.4 clipboard.writeText：{text} → 系统剪贴板（P2-4）
+        runtime.host.register("clipboard.writeText") { args ->
+            guard(args) { json ->
+                val app = appRef ?: return@guard err("app 未初始化")
+                val text = json.optString("text", "")
+                val cm = app.getSystemService(android.content.ClipboardManager::class.java)
+                    ?: return@guard err("ClipboardManager 不可用")
+                cm.setPrimaryClip(android.content.ClipData.newPlainText("dsh", text))
+                """{"ok":true}"""
+            }
+        }
+
+        // §6.4 clipboard.readImage：剪贴板含 image/* 时返回 base64（P2-4；读文本走客户端浏览器 API）
+        runtime.host.register("clipboard.readImage") { _ ->
+            guard("{}") { _ ->
+                val app = appRef ?: return@guard err("app 未初始化")
+                val cm = app.getSystemService(android.content.ClipboardManager::class.java)
+                    ?: return@guard err("ClipboardManager 不可用")
+                val clip = cm.primaryClip
+                if (clip == null || clip.itemCount == 0) return@guard """{"ok":false,"error":"clipboard-empty"}"""
+                val item = clip.getItemAt(0)
+                val uri = item.uri
+                val isImage = clip.description?.hasMimeType("image/*") == true ||
+                    (uri != null && app.contentResolver.getType(uri)?.startsWith("image/") == true)
+                if (!isImage || uri == null) return@guard """{"ok":false,"error":"clipboard-not-image"}"""
+                val bytes = app.contentResolver.openInputStream(uri)?.use { it.readBytes() }
+                    ?: return@guard """{"ok":false,"error":"clipboard-read-failed"}"""
+                val mime = app.contentResolver.getType(uri) ?: "image/png"
+                val data = android.util.Base64.encodeToString(bytes, android.util.Base64.NO_WRAP)
+                val o = org.json.JSONObject()
+                o.put("ok", true)
+                o.put("data", data)
+                o.put("mime", mime)
+                o.put("size", bytes.size)
+                o.toString()
+            }
+        }
+
+        // §6.4 power.keepAwake：{enable:true|false} → AgentKeepAlive dataSync 前台服务（specs/109，P2-5）
+        runtime.host.register("power.keepAwake") { args ->
+            guard(args) { json ->
+                val app = appRef ?: return@guard err("app 未初始化")
+                val enable = json.optBoolean("enable", false)
+                if (enable) {
+                    KeepAliveService.start(app)
+                } else {
+                    KeepAliveService.stop(app)
+                }
+                """{"ok":true,"enable":$enable}"""
+            }
+        }
+
+        // §6.4 fs.pickFiles：SAF ACTION_OPEN_DOCUMENT，两段式（P2-3）；结果拷入 cacheDir 交 Node 可读绝对路径
+        runtime.host.register("fs.pickFiles") { args ->
+            guard(args) { json ->
+                val app = appRef ?: return@guard err("app 未初始化")
+                val id = PendingSlots.create("pickFiles")
+                val intent = android.content.Intent(app, PickDelegateActivity::class.java)
+                    .putExtra(PickDelegateActivity.EXTRA_MODE, "pickFiles")
+                    .putExtra(PickDelegateActivity.EXTRA_SLOT, id)
+                    .putExtra(PickDelegateActivity.EXTRA_MIME, json.optString("mime", "*/*"))
+                    .putExtra(PickDelegateActivity.EXTRA_MULTIPLE, json.optBoolean("multiple", false))
+                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                app.startActivity(intent)
+                """{"ok":true,"pending":true,"id":"$id"}"""
+            }
+        }
+
+        // §6.4 fs.saveFile：SAF ACTION_CREATE_DOCUMENT，两段式（P2-3）；data(base64)/text 先暂存，选中目标后写入
+        runtime.host.register("fs.saveFile") { args ->
+            guard(args) { json ->
+                val app = appRef ?: return@guard err("app 未初始化")
+                val dataB64 = json.optString("data", "")
+                val text = json.optString("text", "")
+                if (dataB64.isEmpty() && text.isEmpty()) return@guard err("data/text 均为空")
+                val bytes = if (dataB64.isNotEmpty()) {
+                    android.util.Base64.decode(dataB64, android.util.Base64.DEFAULT)
+                } else {
+                    text.toByteArray(Charsets.UTF_8)
+                }
+                val staged = File(app.cacheDir, "save-stage-${System.currentTimeMillis()}.bin")
+                staged.writeBytes(bytes)
+                val id = PendingSlots.create("saveFile")
+                val intent = android.content.Intent(app, PickDelegateActivity::class.java)
+                    .putExtra(PickDelegateActivity.EXTRA_MODE, "saveFile")
+                    .putExtra(PickDelegateActivity.EXTRA_SLOT, id)
+                    .putExtra(PickDelegateActivity.EXTRA_MIME, json.optString("mime", "application/octet-stream"))
+                    .putExtra(PickDelegateActivity.EXTRA_NAME, json.optString("name", "download.bin"))
+                    .putExtra(PickDelegateActivity.EXTRA_STAGED, staged.absolutePath)
+                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                app.startActivity(intent)
+                """{"ok":true,"pending":true,"id":"$id"}"""
             }
         }
 

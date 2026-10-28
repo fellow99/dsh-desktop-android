@@ -132,6 +132,9 @@ export function apply(ctx, config = {}) {
   })
   const statuses = new Map()
 
+  /** 运行中 turn 的引用计数（specs/109 保活：>0 时前台服务开启）。 */
+  let keepAliveRefs = 0
+
   /**
    * @param {'turn-idle'|'approval'} kind
    * @param {string} sessionId
@@ -156,7 +159,22 @@ export function apply(ctx, config = {}) {
     const sessionId = sessionIdOf(agent)
     const previous = statuses.get(sessionId)
     statuses.set(sessionId, status)
-    if (status === 'idle' && previous === 'running') {
+    // AgentKeepAlive（specs/109）：turn 运行期 dataSync 前台保活，回合结束即停。
+    // 有多个会话在跑时按引用计数，最后一个 running 才停；桥失败静默（非关键路径）。
+    if (status === 'running' && previous !== 'running') {
+      keepAliveRefs += 1
+      if (keepAliveRefs === 1) {
+        invokeHost('power.keepAwake', { enable: true }, { timeoutMs: NOTIFY_TIMEOUT_MS }).catch(error => {
+          logFailure(ctx, `power.keepAwake enable failed: ${error instanceof Error ? error.message : String(error)}`)
+        })
+      }
+    } else if (status === 'idle' && previous === 'running') {
+      keepAliveRefs = Math.max(0, keepAliveRefs - 1)
+      if (keepAliveRefs === 0) {
+        invokeHost('power.keepAwake', { enable: false }, { timeoutMs: NOTIFY_TIMEOUT_MS }).catch(error => {
+          logFailure(ctx, `power.keepAwake disable failed: ${error instanceof Error ? error.message : String(error)}`)
+        })
+      }
       notify('turn-idle', sessionId, 'dsh · 回合完成', `会话 ${shortSession(sessionId)} 已空闲`)
     }
   })

@@ -83,11 +83,12 @@
     # 通知（P2）：审批/失败/完成三类，channel dsh-events
     - id: notify
       name: '@dsh-android/notify'
-    # 诊断（P2）：/_android/facts，默认关闭
+    # 诊断（P2）：/_android/facts，debug-only（Kotlin 侧 DSH_ANDROID_FACTS=1 仅 debug 构建下发；
+    # release 恒为 '0' → enabled=false，满足 FR-105-013）
     - id: facts
       name: '@dsh-android/facts'
       config:
-        enabled: false
+        enabled: !!js process.env.DSH_ANDROID_FACTS === '1'
     # 外部打开（P2）：宿主桥 shell.openExternal（Intent ACTION_VIEW）
     - id: open-in-app-android
       name: '@dsh-android/open-in-app'

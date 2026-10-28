@@ -1,17 +1,17 @@
 # `@dsh-android/facts`
 
-诊断端点 `GET /_ohos/facts`，**默认关闭**，正式构建**不可开启**（FR-105-013）。
+诊断端点 `GET /_android/facts`，**默认关闭**，正式构建**不可开启**（FR-105-013）。
 
 ## 形态
 
 ```js
-export const name = 'facts-ohos'
+export const name = 'facts-android'
 export const inject = ['webServer', 'connection']
 export function apply(ctx, config) { … }
 ```
 
 - `config.enabled !== true` ⇒ 只打一行日志、**不注册任何路由**；bundle 行里是 `enabled: false`。
-- 启用后：`ctx.effect(() => ctx.webServer.register({ kind:'exact', path:'/_ohos/facts', handler }), label)`（上游标准写法，`packages/host/open-in-app/src/index.ts:193-204`）。
+- 启用后：`ctx.effect(() => ctx.webServer.register({ kind:'exact', path:'/_android/facts', handler }), label)`（上游标准写法，`packages/host/open-in-app/src/index.ts:193-204`）。
 - 每个请求先 `ctx.connection.requestRejection(req)`：Host/Origin 栅栏 + 浏览器认证 cookie，未通过回 401/403；非 GET 回 405。
 
 ## 返回内容

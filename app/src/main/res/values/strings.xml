@@ -1,4 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">DSH Desktop</string>
+    <string name="keepalive_title">DSH 运行中</string>
+    <string name="keepalive_text">Agent 正在执行任务，保持连接</string>
 </resources>

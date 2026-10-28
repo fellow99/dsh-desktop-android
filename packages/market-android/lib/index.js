@@ -216,6 +216,24 @@ export function apply(ctx) {
         .catch(() => {})
       return handle
     },
+    /**
+     * G6 安装链 lookup：`pnpm view <spec> ... --json` 的进程内执行（worker 跑随包
+     * 纯 JS pnpm）。上游 `@deepseek-ai/dsh-plugin-manager` 的 `viewProfilePackage`
+     * 目前对这条路只会 execa 裸 spawn `pnpm`（本平台没有可执行子进程：引擎是
+     * `libnode.so` 无 CLI 入口、载荷目录 noexec、W^X 禁自写可执行），所以该成员
+     * 是登记的修复方向——上游按成员 feature-detect 前它不会被自动消费
+     * （plugin-manager 只读 `profile.packageManager`/`pnpmCommand`）。
+     * 签名与 `runPlugin` 完全对齐，`args` 即完整 view argv（含 `--json`）。
+     * @param {readonly string[]} args - pnpm argv, e.g. `['view', 'pkg', 'name', 'version', '--json']`.
+     * @param {string} _invokingDir - ignored: the launched profile directory is authoritative.
+     * @param {AbortSignal} [signal] - the caller's abort signal.
+     * @returns {{ stdout: import('node:stream').PassThrough, stderr: import('node:stream').PassThrough,
+     *   done: Promise<{ exitCode: number | null, signal: NodeJS.Signals | null }>, cancel: () => void }}
+     */
+    lookup(args, _invokingDir, signal) {
+      const argv = Array.isArray(args) ? args.map((value) => String(value)) : []
+      return runPnpmInProcess(argv, { dir: launched.dir, signal })
+    },
     /** Engine readiness (the desktop branch never reads this; kept for diagnostics). */
     probePnpm() {
       return Promise.resolve(assertPnpmEngine(resolveEngineEntry()))

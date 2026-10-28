@@ -29,6 +29,19 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <!-- SAF 两段式委托页（fs.pickFiles / fs.saveFile）：透明、不入最近任务 -->
+        <activity
+            android:name=".host.PickDelegateActivity"
+            android:excludeFromRecents="true"
+            android:exported="false"
+            android:theme="@android:style/Theme.Translucent.NoTitleBar" />
+
+        <!-- AgentKeepAlive（specs/109）：turn 运行期 dataSync 保活，turn 结束即停 -->
+        <service
+            android:name=".host.KeepAliveService"
+            android:exported="false"
+            android:foregroundServiceType="dataSync" />
     </application>
 
 </manifest>

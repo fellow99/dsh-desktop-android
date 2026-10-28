@@ -1,5 +1,5 @@
 /**
- * `@dsh-android/facts` — `GET /_ohos/facts` diagnostics endpoint, disabled by
+ * `@dsh-android/facts` — `GET /_android/facts` diagnostics endpoint, disabled by
  * default.
  *
  * Upstream has no facts/diagnostics service and no `/health`-style route
@@ -9,7 +9,7 @@
  *
  * Contract:
  * - config is exactly `{ enabled }`, default `false` (bundle row
- *   `facts-ohos`); when false the plugin registers nothing;
+ *   `facts-android`); when false the plugin registers nothing;
  * - every request goes through `ctx.connection.requestRejection(req)` first —
  *   the same cookie/Host fence as the rest of the web UI (401/403);
  * - the payload is a snapshot of runtime facts, and NEVER a token: only
@@ -24,13 +24,13 @@
 import { HOST_CAPABILITIES, isAvailable as hostBridgeAvailable } from './host-bridge.js'
 
 /** Cordis function-plugin name (matches the bundle row id). */
-export const name = 'facts-ohos'
+export const name = 'facts-android'
 
 /** The route carrier and the authentication fence. */
 export const inject = ['webServer', 'connection']
 
 /** Exact route path. */
-export const FACTS_PATH = '/_ohos/facts'
+export const FACTS_PATH = '/_android/facts'
 
 /** Credential-shaped names that must never appear in the payload. */
 export const SENSITIVE_ENV_PATTERN = /TOKEN|KEY|SECRET|PASSWORD|AUTH|COOKIE|CREDENTIAL|SESSION/i
@@ -208,7 +208,7 @@ function sendJson(res, status, payload) {
 export function apply(ctx, config = {}) {
   if (config?.enabled !== true) {
     try {
-      ctx.logger?.('facts-ohos')?.info?.('facts endpoint disabled (config.enabled=false); release builds must keep it disabled')
+      ctx.logger?.('facts-android')?.info?.('facts endpoint disabled (config.enabled=false); release builds must keep it disabled')
     } catch {
       // Logging is optional.
     }
@@ -216,7 +216,7 @@ export function apply(ctx, config = {}) {
   }
   const connection = ctx.connection
   if (connection === undefined || typeof connection.requestRejection !== 'function') {
-    throw new Error('facts-ohos: ctx.connection.requestRejection is required to authenticate the diagnostics endpoint')
+    throw new Error('facts-android: ctx.connection.requestRejection is required to authenticate the diagnostics endpoint')
   }
   ctx.effect(
     () =>
