@@ -13,8 +13,10 @@ android {
         applicationId = "org.fellow99.dsh.android"
         minSdk = 29
         targetSdk = 36
-        versionCode = 1
-        versionName = "0.1.0"
+        // 001-building-workflow：发行版本由 CI 从 tag 注入（-PappVersionName/-PappVersionCode）；
+        // 缺省回落脚手架值（本地开发形态不变）。versionCode = MAJOR*10000+MINOR*100+PATCH。
+        versionCode = (project.findProperty("appVersionCode") as String?)?.toIntOrNull() ?: 1
+        versionName = (project.findProperty("appVersionName") as String?) ?: "0.1.0"
         // A14：引擎只有 arm64-v8a；x86_64/模拟器明确不支持
         ndk {
             abiFilters += "arm64-v8a"

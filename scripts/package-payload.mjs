@@ -154,7 +154,8 @@ const versionLines = [
   `sha256=${sha256}`,
   `files=${manifest.length}`,
   `bytes=${tar.length}`,
-  'version=app 0.1.0 / dsh 0.2.1-rc.2 / node 24.22.1',
+  // 001-building-workflow：app 版本由 CI 从 tag 注入（DSH_APP_VERSION）；缺省回落本地开发形态。
+  `version=app ${process.env.DSH_APP_VERSION || '0.1.0'} / dsh 0.2.1-rc.2 / node 24.22.1`,
   `inputsKey=${inputsKey}`,
 ];
 writeFileSync(VERSION, versionLines.join('\n') + '\n');
