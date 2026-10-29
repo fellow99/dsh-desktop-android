@@ -17,7 +17,7 @@
 
  - [x] TC-004 引擎链路 --check → PASS
  - [x] TC-005 本地彩排（含 TC-002/TC-003）→ PASS（APK 145MB；badging versionName='0.2.1'/versionCode='201'）
-- [ ] Code Review（requesting → receiving）
+ - [x] Code Review（requesting → receiving）→ 5C/4I/5M 全闭环（见 REVIEW_REPORT.md）
 - [ ] 提交（git-commit 前缀）/推送/打 tag
 
 ## 证据
