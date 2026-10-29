@@ -41,3 +41,7 @@ app/src/main/jniLibs/
 app/src/main/assets/dsh-payload/
 # Node 侧依赖与构建中间物
 node_modules/
+
+# 例外：git 插件随包 vendor 闭包（204；assemble-payload assertGitClosure 依赖，勿被上方 node_modules/ 吞掉）
+!packages/git-android/node_modules/
+!packages/git-android/node_modules/**
