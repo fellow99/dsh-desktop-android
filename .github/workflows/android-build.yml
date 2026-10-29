@@ -176,16 +176,15 @@ jobs:
           DSH_APP_VERSION="$APP_VERSION" \
             node scripts/package-payload.mjs --src build/payload-stage/root
 
-      - name: ⑩ Setup JDK 17（Gradle 缓存）
+      - name: ⑩ Setup JDK 17（Temurin）
         uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: '17'
-          cache: gradle
-          # 001-building-workflow（CI run#3 教训）：默认 hashFiles('**/*.gradle*') 会深扫工作区，
-          # 在 upstream/deepseek-harness 的 pnpm node_modules 符号链接环上 ELOOP——收窄到主仓单文件
-          cache-dependency-path: gradle/libs.versions.toml
-
+          # 001-building-workflow（CI run#3/#4 教训）：cache: gradle 的 save 预处理会深扫工作区，
+          # 在 upstream/deepseek-harness 的 pnpm node_modules 符号链接环上 ELOOP（收窄
+          # cache-dependency-path 也无效）。发布型流水线构建频率低，Gradle 依赖重装成本可接受，
+          # 故不启用 Gradle 缓存。
       - name: ⑩ 补装 Android SDK 组件（build-tools 36.0.0 / platform 36）
         run: |
           yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" \
