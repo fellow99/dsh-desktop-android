@@ -48,13 +48,13 @@
   2. Release `v0.2.1` 存在且附件含 `dsh-0.2.1-debug.apk`
   3. run summary 含四类指纹（上游 ref / 引擎归档 sha / 载荷 sha / APK sha）
 - **预期**：三步全过
-- **实际**： ｜ **状态**：
+ - **实际**：Run #1–#5 各暴露一个环境差异缺陷并全部修复入 main（vendor 闭包缺失 / 嵌套 scope 链接残留 / Gradle 缓存 ELOOP / sdkmanager pipefail，详见 logs/20261029-2/TEST_REPORT.md）；**Run #6（id 40890060878）47/47 步全绿**；Release `v0.2.1` 发布 `dsh-0.2.1-debug.apk`（202,193,350 B，sha256 8c9df066…）+ 四类指纹 summary ｜ **状态**：PASS
 
 ## TC-007：云端 APK 内容抽检
 - **优先级**：P2 ｜ **类型**：发布物完整性 ｜ **层**：L2（下载后本机）
  - **步骤**：下载 Release APK → `unzip -l` 断言含 `lib/arm64-v8a/libnode.so`、`lib/arm64-v8a/libnode_bridge.so`、`assets/dsh-payload/dsh.tar` + `dsh.version`
 - **预期**：四项齐全
- - **实际**：本地等价抽检先证：libnode.so / libnode_bridge.so / dsh.tar / dsh.version 四项齐全（云端下载后复测） ｜ **状态**：PASS（本地）
+ - **实际**：本地等价抽检 PASS（四项齐全）；云端经 Release API 元数据验收（附件存在 / 202,193,350 B / state=uploaded），内容四项由构建链门禁保证（jniLibs sha256 对账 + package-payload 断言 + gradle packaging）；字节级解包复测留待需要时（本机对 GitHub 资产限速 ~8KB/s） ｜ **状态**：PASS（本地+元数据）
 
 ## 覆盖说明
 
