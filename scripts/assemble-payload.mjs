@@ -29,7 +29,9 @@ import {
 } from './lib/payload-shims.mjs';
 
 const ROOT = resolve(fileURLToPath(new URL('..', import.meta.url)));
-const DSH_ROOT = resolve(ROOT, '../deepseek-harness');
+ // 001-building-workflow：上游根可经环境变量覆盖（CI 把三仓 checkout 进工作区子目录时注入）；
+ // 缺省保持本地开发布局（../deepseek-harness、../dsh-market）。
+ const DSH_ROOT = resolve(process.env.DSH_HARNESS_DIR ?? resolve(ROOT, '../deepseek-harness'));
 const STAGE = resolve(ROOT, 'build/payload-stage/root');
 const WORK = resolve(ROOT, 'build/payload-stage/.work');
 const PROFILE_SRC = resolve(ROOT, 'profiles/android');
@@ -356,7 +358,7 @@ function collectAndroidPackages(runTree) {
 
 // ── P3：随包物化（git 闭包 / pnpm 引擎 / dshmarket）────────────────────────
 const PNPM_VERSION = '10.34.6';
-const MARKET_ROOT = resolve(ROOT, '../dsh-market');
+ const MARKET_ROOT = resolve(process.env.DSH_MARKET_DIR ?? resolve(ROOT, '../dsh-market'));
 const GIT_CLOSURE_MIN_PACKAGES = 50;
 
 /** 断言 @dsh-android/git 自带的 isomorphic-git 闭包完整（vendor 随包，无需 pnpm add）。 */
