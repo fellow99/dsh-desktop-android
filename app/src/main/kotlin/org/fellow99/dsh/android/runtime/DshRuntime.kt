@@ -221,9 +221,20 @@ object DshRuntime {
                     if (obj != null) {
                         when (obj.optString("phase")) {
                             "ready" -> {
-                                // 读后即删（无论后续探活成败，token 不留盘）
+                                // 读后即删（无论是否采纳，token 都不留盘，§8.4）
                                 runCatching { readyFile.delete() }
-                                return ReadyResult(envelope = obj)
+                                // 陈旧信封防御：上次进程被强杀时残留的 ready.json 指向已死端口，
+                                // 消费它必然探活失败，且本代自己的 fresh ready.json 会毒化下一代
+                                //（失败循环：44251→34219→38513 实证）。非本进程 pid 的一律丢弃并继续轮询。
+                                val envelopePid = obj.optInt("pid", -1)
+                                if (envelopePid != -1 && envelopePid != android.os.Process.myPid()) {
+                                    AppLog.line(
+                                        "warn", "runtime",
+                                        "stale ready.json discarded (pid=$envelopePid != ${android.os.Process.myPid()})；keep polling",
+                                    )
+                                } else {
+                                    return ReadyResult(envelope = obj)
+                                }
                             }
                             "failed", "payload-missing" -> {
                                 runCatching { readyFile.delete() }
