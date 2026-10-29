@@ -42,7 +42,7 @@
 | `deepseek-ai/deepseek-harness` | tag `dsh-v0.2.1-rc.2` | 载荷上游（pnpm build → deploy 物化） |
 | `dsh-market/dsh-market` | tag `v1.66.42` | 市场包（npm build → dshmarket 物化） |
 
-## 5. 约束
+ - 体积核对：载荷随包后实测 debug 全量包 ≈145 MB（dsh.tar 经 APK zip 压缩，15656 文件），仍在 FR-108-5 ≤200MB 预算内；release 签名体系属 108 模块 P4。
 
 - 密钥/凭证不入库（FR-108-2）；CI 仅用 `GITHUB_TOKEN`。
 - 二进制不入库（§13）：jniLibs、dsh-payload 仍由管线在构建期现做。
