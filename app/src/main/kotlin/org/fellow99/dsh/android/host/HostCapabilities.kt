@@ -30,6 +30,9 @@ object HostCapabilities {
     @Volatile
     private var appRef: Application? = null
 
+    /** 可见 Activity 计数（T-011 前台门事实源）。 */
+    private val resumedActivities = java.util.concurrent.atomic.AtomicInteger(0)
+
     /** 两段式槽位（§6.4）：pending → done/expired；5 分钟过期；Activity 恢复时解析。 */
     private object PendingSlots {
         enum class State { PENDING, DONE, EXPIRED }
@@ -92,13 +95,22 @@ object HostCapabilities {
 
     /** 由 DshApplication 的 ActivityLifecycleCallbacks 在 onActivityResumed 时调用。 */
     fun onAppResumed(app: Application) {
+        resumedActivities.incrementAndGet()
         PendingSlots.onAppResumed(app)
+    }
+
+    /** 前台计数递减（T-011：notify 前台门的事实源）。 */
+    fun onAppPaused(app: Application) {
+        resumedActivities.decrementAndGet()
     }
 
     /** SAF 委托页回调入口：完成任意槽位（host.result 轮询方随后取走结果）。 */
     fun completeSlot(id: String, resultJson: String) {
         PendingSlots.complete(id, resultJson)
     }
+
+    /** 应用是否有可见 Activity（T-011）。 */
+    fun isForeground(): Boolean = resumedActivities.get() > 0
 
     fun register(app: Application, runtime: NodeRuntime) {
         appRef = app
@@ -201,18 +213,35 @@ object HostCapabilities {
             }
         }
 
-        // §6.4 shell.openExternal：https/http → ACTION_VIEW；file URI 等如实降级（P3 FileProvider 路线）
+        // §6.4 shell.openExternal：https/http 直通；工作区内 file:// 经 WorkspaceFilesProvider
+        // 转 content://（T-005，P3 路线落地，FLAG_GRANT_READ）；其余如实降级
         runtime.host.register("shell.openExternal") { args ->
             guard(args) { json ->
+                val app = appRef ?: return@guard err("app 未初始化")
                 val uri = json.optString("uri", "")
                 val parsed = android.net.Uri.parse(uri)
-                if (parsed.scheme == "https" || parsed.scheme == "http") {
-                    val intent = Intent(Intent.ACTION_VIEW, parsed).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                    app.startActivity(intent)
-                    """{"ok":true}"""
-                } else {
-                    """{"ok":false,"error":"not-implemented","hint":"openExternal 当前仅支持 https/http；工作区文件外打开属 P3（FileProvider 路线）"}"""
+                val contentUri = when {
+                    parsed.scheme == "https" || parsed.scheme == "http" -> parsed
+                    parsed.scheme == "file" -> {
+                        val file = java.io.File(parsed.path ?: "")
+                        if (!file.isFile) {
+                            return@guard """{"ok":false,"error":"not-found","hint":"file 不存在或不是文件"}"""
+                        }
+                        WorkspaceFilesProvider.uriForFile(app, file)
+                            ?: return@guard """{"ok":false,"error":"outside-workspace-fence","hint":"file 外打开当前仅支持应用沙箱工作区内的文件"}"""
+                    }
+                    else -> null
                 }
+                if (contentUri == null) {
+                    return@guard """{"ok":false,"error":"not-implemented","hint":"openExternal 支持 https/http 与工作区内 file://；其余 scheme 不支持"}"""
+                }
+                val mime = if (contentUri.scheme == "content") app.contentResolver.getType(contentUri) else null
+                val intent = Intent(Intent.ACTION_VIEW).apply {
+                    if (mime != null) setDataAndType(contentUri, mime) else setData(contentUri)
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                }
+                app.startActivity(intent)
+                """{"ok":true,"served":"${contentUri.scheme}://${contentUri.authority}"}"""
             }
         }
 
@@ -291,11 +320,19 @@ object HostCapabilities {
             }
         }
 
-        // §6.4 fs.pickFiles：SAF ACTION_OPEN_DOCUMENT，两段式（P2-3）；结果拷入 cacheDir 交 Node 可读绝对路径
+        // §6.4 fs.pickFiles：SAF ACTION_OPEN_DOCUMENT，两段式（P2-3）；结果拷入 cacheDir 交 Node 可读绝对路径。
+        // 顺带执行 T-012 清理契约：上一轮交付的 picked-* 超过 24h 无人认领即回收（后台线程）。
         runtime.host.register("fs.pickFiles") { args ->
             guard(args) { json ->
                 val app = appRef ?: return@guard err("app 未初始化")
                 val id = PendingSlots.create("pickFiles")
+                Thread {
+                    runCatching {
+                        val cutoff = System.currentTimeMillis() - 24 * 60 * 60_000L
+                        app.cacheDir.listFiles { f -> f.name.startsWith("picked-") && f.lastModified() < cutoff }
+                            ?.forEach { it.delete() }
+                    }
+                }.start()
                 val intent = android.content.Intent(app, PickDelegateActivity::class.java)
                     .putExtra(PickDelegateActivity.EXTRA_MODE, "pickFiles")
                     .putExtra(PickDelegateActivity.EXTRA_SLOT, id)
@@ -381,6 +418,7 @@ object HostCapabilities {
             put("userRoot", Environment.getExternalStorageDirectory().absolutePath)
         })
         o.put("storageMode", BuildConfig.DSH_STORAGE_MODE)
+        o.put("foreground", isForeground()) // T-011：notify 前台门的运行时事实
         o.put("ok", true) // FR-CAP-1：所有能力响应统一带 ok 字段
         return o.toString()
     }

@@ -5,7 +5,7 @@
 **上游基线：** `deepseek-harness` `dsh-v0.2.1-rc.2` ｜ 引擎 Node **v24.22.1**（`aosp-node-runtime`，jniLibs 投放）｜ 桥 `node-bridge` **0.2.0**（Maven Central：`io.github.fellow99:node-bridge`）
 
 **技术栈：** Kotlin（View 体系）· 系统 WebView · 进程内 `libnode.so`（`node::Start`，JNI 槽位表桥）· dsh Host（HTTP + WebSocket）
-**文档生成时间：** 2026-10-27 ｜ **最后更新：** 2026-10-27 ｜ **对应需求：** `000-scaffold`
+**文档生成时间：** 2026-10-27 ｜ **最后更新：** 2026-10-29（模块状态回填，任务登记册 docs/020） ｜ **对应需求：** `000-scaffold`
 
 ---
 
@@ -67,20 +67,20 @@
 
 | # | 模块 | 目录 | 状态 | 说明 |
 |---|---|---|---|---|
-| 101 | 运行时启动编排 | [101-runtime-launch-orchestration/](./101-runtime-launch-orchestration/) | 🟡 Partial | `DshRuntime` 状态机已实现；真机取证待门禁报告 |
-| 102 | 载荷管线 | [102-payload-pipeline/](./102-payload-pipeline/) | 🟡 Partial | 解包/打包脚本完成；真实上游载荷未装配 |
-| 103 | WebView 外壳 | [103-webview-shell/](./103-webview-shell/) | 🟡 Partial | 配置矩阵/围栏/自愈已实现；文件选择与下载待接 |
-| 104 | 宿主能力桥 | [104-host-capability-bridge/](./104-host-capability-bridge/) | 🟡 Partial | 首批 6 能力注册；16 项冻结面未齐 |
-| 105 | 上游适配层 | [105-upstream-adapter-bundle/](./105-upstream-adapter-bundle/) | ⬜ Planned | `android` profile + `@dsh-android/bundle` |
-| 106 | 工作区选择 | [106-workspace-picker/](./106-workspace-picker/) | ⬜ Planned | 三+一主目录、根围栏、权限门 |
-| 107 | 诊断与可观测 | [107-diagnostics-observability/](./107-diagnostics-observability/) | ⬜ Planned | `/_android/facts`、selfcheck |
-| 108 | 合规与发布 | [108-compliance-release/](./108-compliance-release/) | 🟡 Partial | 双 flavor/签名规划已落 Gradle；发布材料未做 |
-| 109 | Agent 保活 | [109-agent-keepalive/](./109-agent-keepalive/) | ⬜ Planned | 前台服务与通知 |
-| 012 | pnpm 集成 | [012-pnpm-integration/](./012-pnpm-integration/) | ⬜ Planned | 内置纯 JS pnpm + worker 调用器 |
-| 201 | dsh-market | [201-dsh-market/](./201-dsh-market/) | ⬜ Planned | 市场契约对接与装/卸闭环 |
-| 204 | GIT 插件 | [204-plugin-git/](./204-plugin-git/) | ⬜ Planned | isomorphic-git 21 工具 |
-| 205 | 品牌资产 | [205-plugin-branding/](./205-plugin-branding/) | ⬜ Planned | 图标/名称/首启门禁 |
-| 206 | 纯 JS 搜索 | [206-plugin-fs-search/](./206-plugin-fs-search/) | ⬜ Planned | 内容搜索后端替换 |
+| 101 | 运行时启动编排 | [101-runtime-launch-orchestration/](./101-runtime-launch-orchestration/) | 🟡 Partial | `DshRuntime` 状态机已实现；真机取证暂缓（T-002） |
+| 102 | 载荷管线 | [102-payload-pipeline/](./102-payload-pipeline/) | 🟡 Partial | 解包/打包脚本完成；载荷随包迭代（2026-10-29 sha12=23b9aaff51a4） |
+| 103 | WebView 外壳 | [103-webview-shell/](./103-webview-shell/) | ✅ Delivered | 配置矩阵/围栏/自愈已实现；SAF 文件选择已接（fs.pickFiles/saveFile，T-009 待上游调用方） |
+| 104 | 宿主能力桥 | [104-host-capability-bridge/](./104-host-capability-bridge/) | ✅ Delivered | 冻结名 17 项全部落地（12 原有 + clipboard×2/power.keepAwake/fs.pickFiles/saveFile，2026-10-29）；两段式协议 + kind 级 TTL |
+| 105 | 上游适配层 | [105-upstream-adapter-bundle/](./105-upstream-adapter-bundle/) | ✅ Delivered | `android` profile + `@dsh-android/bundle` + 垫片 S1–S5 全部随包 |
+| 106 | 工作区选择 | [106-workspace-picker/](./106-workspace-picker/) | ✅ Delivered | 三+一主目录、根围栏、权限门（P2 完整版实测） |
+| 107 | 诊断与可观测 | [107-diagnostics-observability/](./107-diagnostics-observability/) | 🟡 Partial | `/_android/facts` 已实现（debug-only 门禁，端点 200 实测）；selfcheck 待做 |
+| 108 | 合规与发布 | [108-compliance-release/](./108-compliance-release/) | 🟡 Partial | 双 flavor/签名规划已落 Gradle；发布材料待正式签名物料（T-008） |
+| 109 | Agent 保活 | [109-agent-keepalive/](./109-agent-keepalive/) | ✅ Delivered | KeepAliveService（dataSync FGS）+ power.keepAwake + 生命周期实证（2026-10-29） |
+| 012 | pnpm 集成 | [012-pnpm-integration/](./012-pnpm-integration/) | ✅ Delivered | 内置纯 JS pnpm 10.34.6 + worker 调用器 + desktopPnpm 契约（含 lookup） |
+| 201 | dsh-market | [201-dsh-market/](./201-dsh-market/) | 🟡 Partial | 市场 UI/装/卸链就绪；G6 lookup 待上游 feature-detect（T-001） |
+| 204 | GIT 插件 | [204-plugin-git/](./204-plugin-git/) | ✅ Delivered | isomorphic-git 21 工具；clone/push 端到端实证（2026-10-29） |
+| 205 | 品牌资产 | [205-plugin-branding/](./205-plugin-branding/) | 🟡 Partial | 启动图标/应用名已定制；Web 侧品牌位需上游 seam（T-006 跟踪） |
+| 206 | 纯 JS 搜索 | [206-plugin-fs-search/](./206-plugin-fs-search/) | 🟡 Partial | 进程内 rg 替身已实现（@dsh-android/subprocess 内，T-013）；与真实 rg 偏差登记待收窄 |
 
 ---
 

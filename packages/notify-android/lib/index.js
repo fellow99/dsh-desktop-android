@@ -113,11 +113,12 @@ function logFailure(ctx, message, detail) {
 
 /**
  * Short, non-sensitive session label for the notification body.
+ * 长 id 取**尾部** 8 字符（唯一性在尾部，头部常是固定前缀如 `session-`，T-022）。
  * @param {string} sessionId
  * @returns {string}
  */
 export function shortSession(sessionId) {
-  return sessionId.length <= 8 ? sessionId : sessionId.slice(0, 8)
+  return sessionId.length <= 8 ? sessionId : `…${sessionId.slice(-8)}`
 }
 
 /**
@@ -143,16 +144,28 @@ export function apply(ctx, config = {}) {
    */
   const notify = (kind, sessionId, title, body) => {
     const allowed = throttle.allow(kind, sessionId)
-    // 诊断可见性：throttle/前台门任一拦截都如实落 console（桥失败经 logFailure 已可见）
-    console.log(`[notify-ohos] entry kind=${kind} fg=${foregroundEnabled()} allowed=${allowed} session=${shortSession(sessionId)}`)
-    if (foregroundEnabled()) return
-    if (!allowed) return
-    invokeHost('notify.show', { title, body, sessionId, kind }, { timeoutMs: NOTIFY_TIMEOUT_MS }).catch(error => {
-      logFailure(ctx, `notify.show failed (${kind}): ${error instanceof Error ? error.message : String(error)}`, {
-        code: error?.code,
-        hint: error?.hint,
+    // T-011：前台门改为运行时事实（runtime.facts.foreground），env 仅作快速短路。
+    // 查询失败按非前台处理（宁可多发，不静默吞通知）。
+    const decide = async () => {
+      let fg = foregroundEnabled()
+      if (!fg) {
+        try {
+          const facts = await invokeHost('runtime.facts', {}, { timeoutMs: 2_000 })
+          fg = facts?.foreground === true
+        } catch {
+          // 桥不可用时如实按非前台继续
+        }
+      }
+      console.log(`[notify-ohos] entry kind=${kind} fg=${fg} allowed=${allowed} session=${shortSession(sessionId)}`)
+      if (fg || !allowed) return
+      invokeHost('notify.show', { title, body, sessionId, kind }, { timeoutMs: NOTIFY_TIMEOUT_MS }).catch(error => {
+        logFailure(ctx, `notify.show failed (${kind}): ${error instanceof Error ? error.message : String(error)}`, {
+          code: error?.code,
+          hint: error?.hint,
+        })
       })
-    })
+    }
+    void decide()
   }
 
   ctx.on('agent/status', payload => {

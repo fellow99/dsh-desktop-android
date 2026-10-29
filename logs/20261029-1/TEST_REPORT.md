@@ -34,6 +34,30 @@
 
 ---
 
+## 推进轮回归附录（2026-10-29 深夜：任务登记册 T-004~T-022 全量处置）
+
+**部署**：载荷 sha12=e290dc09e990（rg 替身+前台门+facts 修正+ripgrep-android-arm64 解析存根）+ debug APK。
+
+| 项 | 结果 | 证据 |
+|---|---|---|
+| **T-013 grep/glob 端到端（进程内 rg 替身）** | ✅ **设备实证** | grep needle-42 → `Found 1 match: demo/b.txt Line 1`；glob demo/*.txt → 两文件；4s 完成。链路：@vscode/ripgrep-android-arm64 解析存根 → @dsh-android/subprocess 拦截 → rg-emulation（files/json 双模式） |
+| **T-010 ready.json pid 校验** | ✅ 决定性验证 | run-as 植入 pid=999999 伪文件 → `stale ready.json discarded (pid=999999 != 6074)；keep polling` → 正常 READY |
+| **T-011 前台门动态化** | ✅ 实证 | `entry kind=turn-idle fg=true allowed=true`（app 前台 → 通知正确抑制）；facts 增 `foreground` 字段 |
+| **T-022 短标签** | ✅ 实证 | 通知/日志 `session=…1cc90033` |
+| T-015 web_search/web_fetch | ✅ | web_search 返回真实源列表；两工具存在且跑通 |
+| T-016 子 agent | ✅ | subagent 实跑 `T-016-SUBAGENT-OK` 回传 |
+| T-017 job_* | ✅ | 启动/列表/输出 wait 全链路（completed exit 0） |
+| T-005 open-in-app 文件面 | ✅ 代码 | WorkspaceFilesProvider（只读+围栏）+ openExternal file://→content://；端到端待实际使用场景 |
+| T-006 品牌图标 | ✅ 代码 | 品牌 vector（深空+蓝鲸+D 标）；Web 侧待上游 seam |
+| T-007 store 线 | ✅ | assembleStoreDebug 编译通过 + 政策清单（specs/108） |
+| T-019/020/021 文档三件 | ✅ | specs/README 回填 / README 补全 / D.3 追加 |
+| T-004 ctx.fs 原语 | 🔁 重新定性 | 机械层已存在、缺口在基类表面+沙箱包装+消费面 → 待上游立项（登记册详述） |
+| T-018 沉浸式/窗口记忆 | 🔁 决议不适用 | Android 全屏默认 + 无窗口态概念；按 C2 不做占位 |
+
+**登记册**：T-004~T-022 状态全部刷新（已完成 14 / 部分完成 1 / 待上游+待接线+暂缓+阻塞+可选 5 / 不适用 1）；T-015/016/017 完成后矩阵 #16/#18/#22 升级 ✅。
+
+---
+
 ## 新构建设备回归（2026-10-29 下午，keystore 阻塞解除：Android Studio debug 签名 + 新载荷）
 
 **环境修复**：模拟器重启（WMI 分离启动）→ 时区 GMT→`Asia/Shanghai`（`cmd alarm set-timezone`，D.3 前置）→ `pm grant` POST_NOTIFICATIONS（重装清授权）。

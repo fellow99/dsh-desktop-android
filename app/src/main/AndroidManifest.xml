@@ -42,6 +42,13 @@
             android:name=".host.KeepAliveService"
             android:exported="false"
             android:foregroundServiceType="dataSync" />
+
+        <!-- T-005：工作区文件只读共享（content:// + FLAG_GRANT_READ），ACTION_VIEW 打开工作区文件 -->
+        <provider
+            android:name=".host.WorkspaceFilesProvider"
+            android:authorities="org.fellow99.dsh.android.workspacefiles"
+            android:exported="false"
+            android:grantUriPermissions="true" />
     </application>
 
 </manifest>

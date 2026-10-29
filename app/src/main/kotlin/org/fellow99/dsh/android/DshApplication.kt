@@ -23,7 +23,10 @@ class DshApplication : Application() {
             }
             override fun onActivityCreated(activity: Activity, savedInstanceState: Bundle?) {}
             override fun onActivityStarted(activity: Activity) {}
-            override fun onActivityPaused(activity: Activity) {}
+            override fun onActivityPaused(activity: Activity) {
+                // 前台计数（T-011）：notify「前台不打扰」门的运行时事实源
+                HostCapabilities.onAppPaused(this@DshApplication)
+            }
             override fun onActivityStopped(activity: Activity) {}
             override fun onActivitySaveInstanceState(activity: Activity, outState: Bundle) {}
             override fun onActivityDestroyed(activity: Activity) {}

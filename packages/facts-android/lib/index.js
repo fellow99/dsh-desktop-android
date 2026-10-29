@@ -21,6 +21,7 @@
  * @module @dsh-android/facts
  */
 
+import { existsSync } from 'node:fs'
 import { HOST_CAPABILITIES, isAvailable as hostBridgeAvailable } from './host-bridge.js'
 
 /** Cordis function-plugin name (matches the bundle row id). */
@@ -138,6 +139,26 @@ export function readBundleRows(ctx) {
 }
 
 /**
+ * 确定性桥可用探测：载荷根（DSH_PAYLOAD_DIR）或 cwd 下 host.js 存在即可用。
+ * @param {NodeJS.ProcessEnv} [env]
+ * @returns {boolean}
+ */
+function detectHostBridge(env = process.env) {
+  const candidates = []
+  if (typeof env.DSH_PAYLOAD_DIR === 'string' && env.DSH_PAYLOAD_DIR !== '') {
+    candidates.push(`${env.DSH_PAYLOAD_DIR.replaceAll('\\', '/')}/host.js`)
+  }
+  candidates.push('host.js')
+  return candidates.some(candidate => {
+    try {
+      return existsSync(candidate)
+    } catch {
+      return false
+    }
+  })
+}
+
+/**
  * Build the facts payload.
  * @param {Record<string, any>} ctx
  * @param {NodeJS.ProcessEnv} [env]
@@ -162,7 +183,9 @@ export function collectFacts(ctx, env = process.env, globalObject = globalThis) 
   }
   let bridgeAvailable = false
   try {
-    bridgeAvailable = hostBridgeAvailable()
+    // T-014：确定性探测（host.js 物化文件存在即桥可用）。此前用 host-bridge 的懒加载
+    // `isAvailable()`（bridgePromise 非空即真），首次调用前恒为 false，语义失真。
+    bridgeAvailable = detectHostBridge(env)
   } catch {
     bridgeAvailable = false
   }
@@ -180,6 +203,7 @@ export function collectFacts(ctx, env = process.env, globalObject = globalThis) 
     profile: env.DSH_PROFILE ?? env.DSH_ANDROID_PROFILE ?? null,
     webServer: { port, origin },
     bundleRows: readBundleRows(ctx),
+    bundleRowsNote: 'rows reflect loader.store at call time; the full composition is applied by the loader at boot (see bootstrap `[bundle]` logs)',
     env: environment.values,
     redactedEnv: environment.redacted,
     shims: readShims(env, globalObject),

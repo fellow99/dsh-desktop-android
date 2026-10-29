@@ -424,6 +424,28 @@ function collectMarketPNPM(runTree) {
   log(`pnpm 引擎已物化 (pnpm@${PNPM_VERSION})`);
 }
 
+/** 206：物化 @vscode/ripgrep 的 android 平台包存根——真实包 lib/index.js 运行时
+ * require.resolve(`@vscode/ripgrep-android-arm64/bin/rg`)，android 平台该 optionalDependency
+ * 不存在 → rgPath 解析直接拒绝（进不到 spawn）。物化后 rgPath 指向存根文件（不执行），
+ * argv 由 @dsh-android/subprocess 进程内接管（docs/020 T-013）。 */
+function collectRipgrepStub(runTree) {
+  const platformPkg = resolve(runTree, 'node_modules/@vscode/ripgrep-android-arm64');
+  if (existsSync(resolve(platformPkg, 'package.json'))) {
+    log('@vscode/ripgrep-android-arm64 存根已物化（断言通过）');
+    return;
+  }
+  mkdirSync(resolve(platformPkg, 'bin'), { recursive: true });
+  writeFileSync(resolve(platformPkg, 'package.json'), JSON.stringify({
+    name: '@vscode/ripgrep-android-arm64',
+    version: '0.0.0-dsh-virtual-stub',
+    description: 'Stub: satisfies @vscode/ripgrep runtime resolution on Android; the resolved rg path is never executed — @dsh-android/subprocess intercepts it and searches in-process (specs/206, T-013).',
+    bin: { rg: 'bin/rg' },
+    private: true,
+  }, null, 2) + '\n');
+  writeFileSync(resolve(platformPkg, 'bin', 'rg'), '# dsh virtual rg: intercepted in-process by @dsh-android/subprocess\n');
+  log('@vscode/ripgrep-android-arm64 存根已物化（bin/rg 由 @dsh-android/subprocess 进程内接管）');
+}
+
 /** 201：物化 dshmarket（lib+client+运行时依赖闭包；@deepseek-ai/* 由宿主闭包提供）。 */
 function collectDshMarket(runTree) {
   const dest = resolve(runTree, 'node_modules/dshmarket');
@@ -532,6 +554,7 @@ function overlay(runTree) {
   // P3：git 闭包断言 + pnpm 引擎 + dshmarket
   assertGitClosure(runTree);
   try { collectMarketPNPM(runTree); } catch (e) { fail(1, `012 物化失败：${e.message}`); }
+  try { collectRipgrepStub(runTree); } catch (e) { fail(1, `206 rg 存根物化失败：${e.message}`); }
   try { collectDshMarket(runTree); } catch (e) { fail(1, `201 物化失败：${e.message}`); }
 
   // 3) 垫片（§5.3 白名单）

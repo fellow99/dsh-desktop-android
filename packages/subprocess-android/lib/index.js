@@ -34,6 +34,7 @@ import { tmpdir } from 'node:os'
 import { isAbsolute, relative, resolve } from 'node:path'
 import { Service } from '@deepseek-ai/cordis'
 import { TailCollector, readerOf } from './output.js'
+import { isRipgrepRequest, runRipgrepEmulation } from './rg-emulation.js'
 
 /** Largest delay Node schedules without clamping it to one millisecond. */
 export const MAX_TIMER_DELAY_MS = 2_147_483_647
@@ -361,6 +362,10 @@ export class OhosSubprocessRuntime extends Service {
    */
   spawn(spec) {
     validateSubprocessSpec(spec)
+    // T-013（specs/206）：本平台无可执行 rg（W^X）。识别上游 tool-fs-search 的 ripgrep
+    // 请求（argv[0]=打包 rg 路径），转进程内替身执行——输出与 rg --json/--files 对齐，
+    // 上游解析器原样消费；否则 exec 必然失败，grep/glob 全部 SEARCH_FAILED。
+    if (isRipgrepRequest(spec.argv)) return this.spawnVirtualRipgrep(spec)
     const env = buildChildEnv(spec.env)
     const program = resolveProgram(spec.argv[0], env, spec.signal)
     const cwd = assertCwdAllowed(spec.cwd)
@@ -501,6 +506,65 @@ export class OhosSubprocessRuntime extends Service {
       },
     }
     this.live.add(handle)
+    return handle
+  }
+
+  /**
+   * ripgrep 的进程内替身执行（T-013）：不走 node:child_process，直接在当前进程
+   * 跑 rg-emulation 并把 stdout/stderr 写入收集器。执行是单步同步的（setImmediate
+   * 内一次完成），故 terminate 只能阻止尚未开始或丢弃未写出的结果。
+   * @param {import('./types.js').SubprocessSpawnSpec} spec
+   * @returns {import('./types.js').SubprocessHandle}
+   */
+  spawnVirtualRipgrep(spec) {
+    validateSubprocessSpec(spec)
+    const env = buildChildEnv(spec.env)
+    const cwd = assertCwdAllowed(spec.cwd, env)
+    const out = outputMode(spec.stdio.stdout, 'stdout', env)
+    const err = outputMode(spec.stdio.stderr, 'stderr', env)
+    const collected = {}
+    if (out.collector !== undefined) collected.stdout = readerOf(out.collector)
+    if (err.collector !== undefined) collected.stderr = readerOf(err.collector)
+
+    let settled = false
+    let resolveDone
+    const done = new Promise(resolve => { resolveDone = resolve })
+    const handle = {
+      stdin: undefined,
+      stdout: undefined,
+      stderr: undefined,
+      control: undefined,
+      collected,
+      done,
+      /** 单步同步执行无法中途打断：仅丢弃尚未写出的结果。 */
+      terminate: () => {},
+      waitForExit: signal => new Promise(resolveWait => {
+        if (signal?.aborted) { resolveWait(false); return }
+        void done.then(() => resolveWait(true))
+      }),
+      terminateForHostExit: () => {},
+    }
+    this.live.add(handle)
+
+    setImmediate(() => {
+      let result
+      try {
+        result = spec.signal?.aborted
+          ? { stdout: '', stderr: '', exitCode: null, signal: 'SIGTERM' }
+          : runRipgrepEmulation({ ...spec, cwd })
+      } catch (error) {
+        result = { stdout: '', stderr: `rg-emulation: ${error instanceof Error ? error.message : String(error)}\n`, exitCode: 2, signal: null }
+      }
+      if (!settled) {
+        if (result.stdout !== '' && out.collector !== undefined) out.collector.push(Buffer.from(result.stdout, 'utf8'))
+        if (result.stderr !== '' && err.collector !== undefined) err.collector.push(Buffer.from(result.stderr, 'utf8'))
+      }
+      settled = true
+      out.collector?.seal()
+      err.collector?.seal()
+      this.live.delete(handle)
+      resolveDone({ exitCode: result.exitCode, signal: result.signal })
+    })
     return handle
   }
 
