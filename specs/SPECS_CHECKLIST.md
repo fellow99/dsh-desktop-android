@@ -31,6 +31,7 @@
 | # | 模块 | spec | plan | tasks | test-cases | 状态 | 源码落点 / 证据 |
 |---|---|---|---|---|---|---|---|
 | M-000 | 工程搭建 | [spec](./000-scaffold/spec.md) | [plan](./000-scaffold/plan.md) | [tasks](./000-scaffold/tasks.md) | [test-cases](./000-scaffold/test-cases.md) | 🟡 Partial | 脚手架/外壳/脚本/文档 ✅；**真机探针 F1–F4 待设备** |
+ | M-001 | GitHub Actions 构建流程 | [spec](./001-building-workflow/spec.md) | [plan](./001-building-workflow/plan.md) | [tasks](./001-building-workflow/tasks.md) | [test-cases](./001-building-workflow/test-cases.md) | ✅ Done | `.github/workflows/android-build.yml` + 版本注入；tag v0.2.1 → Run #6 全绿，Release 发布 APK（logs/20261029-2/） |
 
 ---
 

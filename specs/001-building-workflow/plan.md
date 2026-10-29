@@ -28,7 +28,7 @@
  ⑦ checkout dsh-market @ v1.66.42 → path: upstream/dsh-market → npm ci（缺 lockfile 则 npm i）→ npm run build
 ⑧ node scripts/assemble-payload.mjs --deploy --apply
 ⑨ DSH_APP_VERSION=<注入> node scripts/package-payload.mjs --src build/payload-stage/root
-⑩ setup-java 17（缓存 gradle）+ sdkmanager 补装 build-tools;36.0.0 / platforms;android-36
+ ⑩ setup-java 17（Temurin，无 Gradle 缓存）+ sdkmanager 补装 build-tools;36.0.0 / platforms;android-36
 ⑪ ./gradlew :app:assembleFullDebug
     -PappVersionName=0.2.1 -PappVersionCode=201（tag 触发时由 ref 派生；dispatch 不注入）
 ⑫ aapt dump badging 验证 versionName/versionCode（FR-001-4 验收）
@@ -66,7 +66,8 @@ workflow_dispatch：不注入 → 回落工程默认（0.1.0/1）——彩排语
 
 ### 缓存策略
 
-- `setup-java` 内建 `cache: gradle`（~/.gradle）。
+ - ~~`setup-java` 内建 `cache: gradle`~~ **已移除**（CI run#3/#4：缓存链路在 harness 的 pnpm 符号链接环上 ELOOP，
+   收窄 cache-dependency-path 亦无效；发布型流水线构建频率低，Gradle 依赖重装成本可接受）。
  - pnpm store：`pnpm config set store-dir "$HOME/.pnpm-store"` + `actions/cache`（key = pnpm-store-<harness pnpm-lock.yaml sha256>，restore-keys 前缀回退）。
 - 引擎归档（85MB）不缓存：单次下载成本低，避免缓存污染。
 

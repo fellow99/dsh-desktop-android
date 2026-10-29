@@ -36,4 +36,4 @@
 - [x] T5-2 本地彩排：关键段本机执行（TC-004/005；引擎 URL/门禁口径实证见 REVIEW_REPORT）
 - [x] T5-3 Code Review（requesting-code-review → receiving-code-review）：5C/4I/5M 全部闭环（REVIEW_REPORT.md）
 - [x] T5-4 各阶段提交（git-commit 规范前缀：`docs` / `build` / `ci` / `fix` / `test`）
-- [ ] T5-5 推送 main + 打 tag `v0.2.1` + 云端回归确认（TC-006）
+ - [x] T5-5 推送 main + 打 tag `v0.2.1` + 云端回归确认（TC-006）→ Run #6 全绿，Release v0.2.1 已发布 APK
