@@ -99,16 +99,16 @@ export class NotificationThrottle {
 }
 
 function logFailure(ctx, message, detail) {
+  // 双通道：cordis logger（宿主日志）+ console.error（桥 err 流 → logcat 可见）
+  console.error(`[notify-ohos] ${message}`, detail ?? '')
   try {
     const logger = typeof ctx.logger === 'function' ? ctx.logger('notify-ohos') : undefined
     if (logger?.warn) {
       logger.warn(message, detail)
-      return
     }
   } catch {
     // A logger failure must not turn a best-effort notification into a turn error.
   }
-  console.error(`[notify-ohos] ${message}`, detail ?? '')
 }
 
 /**
@@ -142,8 +142,11 @@ export function apply(ctx, config = {}) {
    * @param {string} body
    */
   const notify = (kind, sessionId, title, body) => {
+    const allowed = throttle.allow(kind, sessionId)
+    // 诊断可见性：throttle/前台门任一拦截都如实落 console（桥失败经 logFailure 已可见）
+    console.log(`[notify-ohos] entry kind=${kind} fg=${foregroundEnabled()} allowed=${allowed} session=${shortSession(sessionId)}`)
     if (foregroundEnabled()) return
-    if (!throttle.allow(kind, sessionId)) return
+    if (!allowed) return
     invokeHost('notify.show', { title, body, sessionId, kind }, { timeoutMs: NOTIFY_TIMEOUT_MS }).catch(error => {
       logFailure(ctx, `notify.show failed (${kind}): ${error instanceof Error ? error.message : String(error)}`, {
         code: error?.code,

@@ -1,6 +1,6 @@
 # TEST_REPORT（logs/20261029-1/）
 
-> 阶段：Testing / Regression ｜ 日期：2026-10-29
+> 阶段：Testing / Regression ｜ 日期：2026-10-29 ｜ **2026-10-29 下午回归附录：新构建（Android Studio debug 签名 + 新载荷 sha12=23b9aaff51a4）已部署，回归完成，见文末「新构建设备回归」节**
 
 ## 测试矩阵
 
@@ -31,3 +31,23 @@
 ## 结论
 
 测试阶段无新增失败项；两项阻塞（签名恢复、上游反哺）均为环境/上游依赖，已分别登记于能力清单 D.2 P4 与 D.2 P1-G6。
+
+---
+
+## 新构建设备回归（2026-10-29 下午，keystore 阻塞解除：Android Studio debug 签名 + 新载荷）
+
+**环境修复**：模拟器重启（WMI 分离启动）→ 时区 GMT→`Asia/Shanghai`（`cmd alarm set-timezone`，D.3 前置）→ `pm grant` POST_NOTIFICATIONS（重装清授权）。
+
+| 项 | 结果 | 证据 |
+|---|---|---|
+| App 内 WebView 加载真实 UI | ✅ | 「Into the Unknown」+ workspace + 模型选择器（此前失败页根因=陈旧 ready.json 循环，`bugfix:` 0de220c 已修；本代干净启动无陈旧文件触发） |
+| 时区门 | ✅ | 会话创建通过（此前 GMT 会被 `session/invalid-time-zone` 拒绝） |
+| **P2-6 facts 端点** | ✅ 200 | `/_android/facts`：`DSH_ANDROID_FACTS="1"`（debug 门禁实证）+ 17 项冻结名单 + 手工 implemented 名单如实呈现 |
+| **P2-5 AgentKeepAlive** | ✅ | turn running → FGS 起（`isForeground=true types=0x1 dataSync`）；idle → `keepalive: stopped`（26s/3s 两轮与命令窗口精确吻合）；dispose 收口在代码 |
+| **M8 通知正文修复** | ✅ | 通知栏「dsh · 回合完成 / 会话 session- 已空闲」——body 首次实证显示（此前恒空） |
+| **notify 静默失败** | ✅ 改进 | 失败双通道可见化（console.error + logger）；本轮即靠它一行定位 POST_NOTIFICATIONS 缺失 |
+| bash 回归 | ✅ | `echo DSH-NOTIFY-FINAL` exit 0，3s |
+| ready.json pid 校验 | ✅ 随包 | 干净启动无触发场景（触发条件=强杀残留）；代码保护在，待下次强杀场景自然验证 |
+| SAF pickFiles/saveFile 功能 | ⏸ | 能力已注册（manifest 合并实证），上游暂无 JS 调用方，端到端待接线 |
+
+**新登记环境前置**：重装/清数据后需重新 `pm grant org.fellow99.dsh.android android.permission.POST_NOTIFICATIONS`（D.3 核对单追加项）。
