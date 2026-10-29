@@ -4,12 +4,18 @@
 # 手动：workflow_dispatch（无 tag 时回落工程默认版本 0.1.0/1，仅用于彩排）。
 #
 # 三件套在云端现做（二进制不入库，docs/000-工程规划.md §13）：
-#   ① 引擎：aosp-node-runtime v24.22.1 Release 归档（sha256 对账）→ 八项 ELF 门禁 → 投放 jniLibs
+#   ① 引擎：aosp-node-runtime Release 归档（sha256 对账）→ 八项 ELF 门禁 → 投放 jniLibs
 #   ② 载荷：deepseek-harness @ dsh-v0.2.1-rc.2（pnpm）+ dsh-market @ v1.66.42（npm）
 #      → assemble-payload --deploy --apply → package-payload
 #   ③ APK：:app:assembleFullDebug（JDK 17，版本从 tag 注入）
 #
 # 上游 ref 锁定见 specs/001-building-workflow/spec.md §4。
+# 评审修复（logs/20261029-2/REVIEW_REPORT.md）：
+#   - 引擎 lock 源锁 origin/main@605715e7（tag v24.22.1 的 lock 仍是 active=24.2.0），
+#     并断言 lock.active.node == 24.22.1（与 node-bridge 0.2.0 的引擎配对）；
+#   - 归档下载 URL 由 lock 的 release.tag + release.archive 构造（lock 的 url 字段是发布页，非下载直链）；
+#   - 上游仓 checkout 进工作区子目录 upstream/*，经 DSH_HARNESS_DIR/DSH_MARKET_DIR 注入
+#     （actions/checkout 拒绝 ../ 父相对路径）。
 
 name: android-build
 
@@ -37,10 +43,12 @@ jobs:
     env:
       # 上游锁定（spec.md §4）
       NODE_RUNTIME_REPO: fellow99/aosp-node-runtime
-      NODE_RUNTIME_REF: v24.22.1
+      # runtime.lock.json 必须来自 active=24.22.1 的提交（tag v24.22.1 的 lock 尚为 24.2.0）
+      NODE_RUNTIME_REF: 605715e7d5e1d02c8ac055c87be3232f0970c67d
       DSH_HARNESS_REF: dsh-v0.2.1-rc.2
       DSH_MARKET_REF: v1.66.42
-      PNPM_VERSION: '11.28.5'   # 对齐 deepseek-harness packageManager
+      PNPM_VERSION: '11.28.5'        # 对齐 deepseek-harness packageManager
+      EXPECTED_ENGINE_NODE: '24.22.1' # 引擎配对：node-bridge 0.2.0 ↔ node 24.22.1
     steps:
       - name: ① Meta — 从 tag 派生版本
         id: meta
@@ -60,6 +68,8 @@ jobs:
 
       - name: ① Checkout dsh-desktop-android
         uses: actions/checkout@v4
+        with:
+          persist-credentials: false
 
       - name: ② Checkout aosp-node-runtime @ ${{ env.NODE_RUNTIME_REF }}
         uses: actions/checkout@v4
@@ -77,33 +87,37 @@ jobs:
       - name: ② Install pnpm @ ${{ env.PNPM_VERSION }}
         run: |
           npm install -g "pnpm@${PNPM_VERSION}"
-          pnpm config set store-dir ~/.pnpm-store --global
+          pnpm config set store-dir "$HOME/.pnpm-store" --global
           pnpm --version
 
-      - name: ② Restore pnpm store
-        uses: actions/cache@v4
-        with:
-          path: ~/.pnpm-store
-          key: pnpm-store-${{ github.run_id }}
-          restore-keys: pnpm-store-
-
       - name: ③ 引擎归档下载 + archiveSha256 对账（单一事实源：runtime.lock.json）
+        env:
+          EXPECTED_ENGINE_NODE: ${{ env.EXPECTED_ENGINE_NODE }}
         run: |
           export LOCK="$GITHUB_WORKSPACE/node-runtime-checkout/runtime.lock.json"
-          ARCHIVE_URL=$(node -e "const l=require(process.env.LOCK);const r=l.releases.find(r=>r.node===l.active.node&&r.abi===l.active.abi);console.log(r.release.url)")
-          WANT_SHA=$(node -e "const l=require(process.env.LOCK);const r=l.releases.find(r=>r.node===l.active.node&&r.abi===l.active.abi);console.log(r.release.archiveSha256)")
+          ACTIVE_NODE=$(node -e "const l=require(process.env.LOCK);console.log(l.active.node)")
+          if [[ "$ACTIVE_NODE" != "$EXPECTED_ENGINE_NODE" ]]; then
+            echo "::error::引擎配对漂移：lock.active.node=$ACTIVE_NODE，期望 $EXPECTED_ENGINE_NODE（node-bridge 0.2.0 配对）；请更新 NODE_RUNTIME_REF 或 EXPECTED_ENGINE_NODE"
+            exit 1
+          fi
+          read -r REL_TAG ARCHIVE WANT_SHA <<< "$(node -e "const l=require(process.env.LOCK);const r=l.releases.find(r=>r.node===l.active.node&&r.abi===l.active.abi);console.log(r.release.tag, r.release.archive, r.release.archiveSha256)")"
+          # lock 的 release.url 是发布页地址，下载直链按 release.tag + release.archive 构造
+          ARCHIVE_URL="https://github.com/${NODE_RUNTIME_REPO}/releases/download/${REL_TAG}/${ARCHIVE}"
           echo "归档：$ARCHIVE_URL"
           mkdir -p build/engine
-          curl -fL --retry 3 --silent --show-error -o build/engine/engine.tar.gz "$ARCHIVE_URL"
-          echo "$WANT_SHA  engine.tar.gz" | (cd build/engine && sha256sum -c -)
-          tar -xzf build/engine/engine.tar.gz -C build/engine
+          curl -fL --retry 3 --silent --show-error -o "build/engine/$ARCHIVE" "$ARCHIVE_URL"
+          echo "$WANT_SHA  $ARCHIVE" | (cd build/engine && sha256sum -c -)
+          tar -xzf "build/engine/$ARCHIVE" -C build/engine
           LIBNODE=$(find build/engine -name 'libnode.so' -type f | head -n1)
           if [[ -z "$LIBNODE" ]]; then echo "::error::归档内未找到 libnode.so"; exit 1; fi
           echo "ENGINE_LIBNODE=$LIBNODE" >> "$GITHUB_ENV"
 
       - name: ④ 八项 ELF 门禁 + 投放（tools/provision.mjs）
+        env:
+          EXPECTED_ENGINE_NODE: ${{ env.EXPECTED_ENGINE_NODE }}
         run: |
           node node-runtime-checkout/tools/provision.mjs \
+            --node "$EXPECTED_ENGINE_NODE" \
             --out node-runtime/src/main/jniLibs \
             --from "$ENGINE_LIBNODE"
 
@@ -117,12 +131,24 @@ jobs:
         with:
           repository: deepseek-ai/deepseek-harness
           ref: ${{ env.DSH_HARNESS_REF }}
-          path: ../deepseek-harness
+          path: upstream/deepseek-harness
           persist-credentials: false
+
+      - name: ⑥ pnpm store 缓存键（来自 harness lockfile 哈希）
+        run: |
+          HASH=$(sha256sum upstream/deepseek-harness/pnpm-lock.yaml | cut -d' ' -f1)
+          echo "PNPM_LOCK_HASH=$HASH" >> "$GITHUB_ENV"
+
+      - name: ⑥ Restore pnpm store
+        uses: actions/cache@v4
+        with:
+          path: ~/.pnpm-store
+          key: pnpm-store-${{ env.PNPM_LOCK_HASH }}
+          restore-keys: pnpm-store-
 
       - name: ⑥ 构建上游 harness（pnpm install --frozen-lockfile + build）
         run: |
-          cd "$GITHUB_WORKSPACE/../deepseek-harness"
+          cd "$GITHUB_WORKSPACE/upstream/deepseek-harness"
           pnpm install --frozen-lockfile
           pnpm build
 
@@ -131,18 +157,20 @@ jobs:
         with:
           repository: dsh-market/dsh-market
           ref: ${{ env.DSH_MARKET_REF }}
-          path: ../dsh-market
+          path: upstream/dsh-market
           persist-credentials: false
 
       - name: ⑦ 构建 dsh-market（npm ci + build）
         run: |
-          cd "$GITHUB_WORKSPACE/../dsh-market"
+          cd "$GITHUB_WORKSPACE/upstream/dsh-market"
           npm ci --no-audit --no-fund
           npm run build
 
-      - name: ⑧⑨ 装配 + 打包载荷（版本注入）
+      - name: ⑧⑨ 装配 + 打包载荷（版本注入；上游根经环境变量指向 upstream/*）
         env:
           APP_VERSION: ${{ steps.meta.outputs.version }}
+          DSH_HARNESS_DIR: ${{ github.workspace }}/upstream/deepseek-harness
+          DSH_MARKET_DIR: ${{ github.workspace }}/upstream/dsh-market
         run: |
           node scripts/assemble-payload.mjs --deploy --apply
           DSH_APP_VERSION="$APP_VERSION" \
@@ -172,7 +200,7 @@ jobs:
           fi
           ./gradlew :app:assembleFullDebug "${ARGS[@]}"
 
-      - name: ⑫ aapt 断言版本元数据
+      - name: ⑫ aapt 断言版本元数据（aapt 输出 versionCode 在前）
         env:
           IS_TAG: ${{ steps.meta.outputs.is_tag }}
           APP_VERSION: ${{ steps.meta.outputs.version }}
@@ -183,8 +211,8 @@ jobs:
           BADGING=$("$ANDROID_HOME/build-tools/36.0.0/aapt" dump badging "$APK")
           echo "$BADGING" | grep '^package:'
           if [[ "$IS_TAG" == "true" ]]; then
-            echo "$BADGING" | grep -F "versionName='$APP_VERSION' versionCode='$APP_VCODE'" \
-              || { echo "::error::版本注入未生效（期望 $APP_VERSION/$APP_VCODE）"; exit 1; }
+            echo "$BADGING" | grep -F "versionCode='$APP_VCODE' versionName='$APP_VERSION'" \
+              || { echo "::error::版本注入未生效（期望 versionCode=$APP_VCODE versionName=$APP_VERSION）"; exit 1; }
           fi
 
       - name: ⑬ 收集产物 + 指纹 summary
@@ -210,7 +238,7 @@ jobs:
             echo "|---|---|"
             echo "| 版本 | $REL_VERSION（versionCode 见 badging） |"
             echo "| APK | \`$NAME\`（sha256 \`$APK_SHA\`） |"
-            echo "| 引擎归档 | sha256 \`$ENGINE_SHA\`（$NODE_RUNTIME_REF） |"
+            echo "| 引擎归档 | sha256 \`$ENGINE_SHA\`（runtime lock @ ${NODE_RUNTIME_REF:0:12}） |"
             echo "| 载荷 | dsh.tar sha256 \`$TAR_SHA\` |"
             echo "| 上游 | harness \`$DSH_HARNESS_REF\` / market \`$DSH_MARKET_REF\` / runtime \`$NODE_RUNTIME_REF\` |"
           } >> "$GITHUB_STEP_SUMMARY"
@@ -248,12 +276,12 @@ jobs:
           |---|---|
           | APK | \`$APK_NAME\`（sha256 \`$APK_SHA\`） |
           | 载荷 | dsh.tar sha256 \`$TAR_SHA\`（dsh 0.2.1-rc.2 / node 24.22.1） |
-          | 上游 | harness \`$DSH_HARNESS_REF\` / market \`$DSH_MARKET_REF\` / runtime \`$NODE_RUNTIME_REF\` |
+          | 上游 | harness \`$DSH_HARNESS_REF\` / market \`$DSH_MARKET_REF\` / runtime lock \`$NODE_RUNTIME_REF\` |
 
           侧载：下载 APK 直接安装。
           EOF
-          # 重跑幂等：先删旧 Release（保留 tag），再重建
-          gh release delete "$GITHUB_REF_NAME" -y --cleanup-tag false || true
+          # 重跑幂等：先删旧 Release（默认保留 git tag，勿加 --cleanup-tag），再重建
+          gh release delete "$GITHUB_REF_NAME" -y || true
           gh release create "$GITHUB_REF_NAME" "dist/$APK_NAME" \
             --title "dsh-desktop-android $APP_VERSION" \
             --notes-file notes.md
