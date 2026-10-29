@@ -98,6 +98,20 @@ function materializeLinks(dir, depth = 0, touched = []) {
   return touched;
 }
 
+/**
+ * 001-building-workflow（CI run#2 教训）：单趟物化会把「整棵 @scope 符号链接」经 cpSync
+ * 批量拷成真实目录，但拷入子树里若仍有链接（dereference 语义差异），需要再走一趟才能清干净。
+ * 迭代至某趟 0 命中（上限 3 趟）；assertNoLinks 兜底。
+ */
+function materializeLinksUntilClean(root, log) {
+  for (let pass = 1; pass <= 3; pass++) {
+    const touched = materializeLinks(root, 0, []);
+    log(`物化链接第 ${pass} 趟：${touched.length} 处`);
+    if (touched.length === 0) return;
+  }
+  log('警告：3 趟后仍有链接被转换（异常形态），交由 assertNoLinks 终判');
+}
+
 /** 复制单个 workspace 包（lib + package.json + cordis.patch.yml），排除嵌套 node_modules。 */
 function copyWorkspacePackage(pkgDir, destRoot) {
   const manifest = resolve(pkgDir, 'package.json');
@@ -298,8 +312,7 @@ function deployTree() {
     mkdirSync(WORK, { recursive: true });
     run(`pnpm --filter @deepseek-ai/dsh deploy --legacy "${target}"`, DSH_ROOT);
   }
-  const linked = materializeLinks(resolve(target, 'node_modules'), 0, []);
-  log(`物化链接 ${linked.length} 处`);
+  materializeLinksUntilClean(resolve(target, 'node_modules'), log);
   const workspacePackages = collectWorkspacePackages(target);
   log(`补全 @deepseek-ai 包 ${workspacePackages.length} 个`);
   const flat = collectNonHoistedDeps(target);
