@@ -187,7 +187,9 @@ jobs:
           # 故不启用 Gradle 缓存。
       - name: ⑩ 补装 Android SDK 组件（build-tools 36.0.0 / platform 36）
         run: |
-          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" \
+          # 001-building-workflow（CI run#5 教训）：默认 shell 带 -o pipefail，`yes |` 会让
+          # sdkmanager 正常退出后因 SIGPIPE 判败；托管 runner 许可证已预接受，直接调用即可。
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" \
             "build-tools;36.0.0" "platforms;android-36" > /dev/null
 
       - name: ⑪ Gradle assembleFullDebug（tag 时注入版本）
