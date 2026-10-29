@@ -177,11 +177,14 @@ jobs:
             node scripts/package-payload.mjs --src build/payload-stage/root
 
       - name: ⑩ Setup JDK 17（Gradle 缓存）
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: '17'
           cache: gradle
+          # 001-building-workflow（CI run#3 教训）：默认 hashFiles('**/*.gradle*') 会深扫工作区，
+          # 在 upstream/deepseek-harness 的 pnpm node_modules 符号链接环上 ELOOP——收窄到主仓单文件
+          cache-dependency-path: gradle/libs.versions.toml
 
       - name: ⑩ 补装 Android SDK 组件（build-tools 36.0.0 / platform 36）
         run: |
