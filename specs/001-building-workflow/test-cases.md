@@ -73,7 +73,7 @@
   3. 下载 APK → `apksigner verify --print-certs` 证书 SHA-256 == `06:ab:2f:93…`（与本地 keystore 一致，证明同一固定签名）
   4. Release notes 含签名证书指纹行
 - **预期**：四步全过；另验证负向门禁：删任一签名 secret 的 tag 构建应在 ⑩a 失败（静态审查 workflow 逻辑覆盖，不实操）
-- **实际**：**Run #7（id 41091935880）25/25 业务步骤全绿**；Release 附件 `dsh-0.2.1-release.apk`（185,508,348 B，state=uploaded，非 draft/prerelease）；云端 ⑫b apksigner 对同款 APK 输出证书 SHA-256 `06ab2f93…`，与本地 keystore/EXPECTED 断言一致（详见 logs/20261030-1/TEST_REPORT.md）；负向门禁由 ⑩a fail-closed 静态逻辑覆盖 ｜ **状态**：PASS
+- **实际**：**Run #7（id 41091935880）25/25 业务步骤全绿**（附件当时名 `dsh-0.2.1-release.apk`，185,508,348 B）；**Run #8（id 41144737353）改名后全绿**，Release 附件 **`dsh-desktop-0.2.1.apk`（185,508,340 B，state=uploaded，非 draft/prerelease，旧名无残留）**；两次云端 ⑫b apksigner 证书 SHA-256 均为 `06ab2f93…`，与本地 keystore/EXPECTED 断言一致，badging 201/0.2.1（详见 logs/20261030-1 与 20261030-2/TEST_REPORT.md）；负向门禁由 ⑩a fail-closed 静态逻辑覆盖 ｜ **状态**：PASS
 
 ## 覆盖说明
 

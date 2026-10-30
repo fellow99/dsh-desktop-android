@@ -50,4 +50,4 @@
 ## T7 发布产物改名（2026-10-30）
 
 - [x] T7-1 workflow ⑬ 产物名统一为 `dsh-desktop-<version>.apk`（去掉变体后缀；中间产物路径仍按变体 `app-full-<variant>.apk`）
-- [ ] T7-2 重打 tag `v0.2.1` → Run #8，Release 附件名为 `dsh-desktop-0.2.1.apk`（TC-009 再验，logs/20261030-2）
+- [x] T7-2 重打 tag `v0.2.1`（→ 98f0644）→ Run #8（41144737353）全绿，Release 附件 `dsh-desktop-0.2.1.apk`（185,508,340 B），签名/版本回归一致（logs/20261030-2/TEST_REPORT.md）

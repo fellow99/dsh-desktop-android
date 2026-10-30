@@ -1,7 +1,7 @@
 # DEV_CHECKLIST · 001 发布产物改名（20261030-2）
 
 - [x] T7-1 workflow ⑬ NAME 改为 `dsh-desktop-${REL_VERSION}.apk`（变体后缀移除；中间产物 app-full-<variant>.apk 路径不变）
-- [ ] T7-2 重打 tag v0.2.1 → Run #8，Release 附件 `dsh-desktop-0.2.1.apk`
+- [x] T7-2 Run #8（41144737353）全绿，Release 附件 `dsh-desktop-0.2.1.apk`（185,508,340 B），签名/版本回归一致
 
 ## 评审要点（fallback 自审）
 
