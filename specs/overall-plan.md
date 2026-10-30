@@ -40,7 +40,7 @@ package-payload.mjs（写）          PayloadInstaller.kt（读）         Node�
 |---|---|
 | C1 上游零补丁 | `verify-upstream.mjs`（待写，102）+ tag 固定 |
 | C2 诚实能力面 | `HostCapabilities.guard`；未注册由桥回 unregistered |
-| C3 证据优先 | `docs/010-P0门禁报告.md`（待真机）+ `/probe.json` |
+| C3 证据优先 | `docs/安卓环境能力清单-v0.2.1.md` §D.4（原 010 已并入）（待真机）+ `/probe.json` |
 | C4 单进程不可重启 | `DshRuntime` 终态建模；错误页唯一恢复=重启应用 |
 | C5 载荷单一事实链 | §三 |
 | C8 失败终态化 | `onFailed` + `Phase.FAILED` |
@@ -51,7 +51,7 @@ package-payload.mjs（写）          PayloadInstaller.kt（读）         Node�
 
 | Phase | 内容 | 出口判据 |
 |---|---|---|
-| P0（本需求） | 脚手架 + 探针 APK + 门禁取证 + 规范文档 | G1/G2/G4/G5/G8/G9/G12/G-WV 有结论 → `docs/010-P0门禁报告.md`；探针清理 |
+| P0（本需求） | 脚手架 + 探针 APK + 门禁取证 + 规范文档 | G1/G2/G4/G5/G8/G9/G12/G-WV 有结论 → `docs/安卓环境能力清单-v0.2.1.md` §D.4（原 010 已并入）；探针清理 |
 | P1 MVP | 正式载荷装配（build-upstream/assemble/package）+ `android` profile + host.js/垫片 + 一次完整对话 | 新会话→流式回复→重启后会话仍在（截图序列） |
 | P2 宿主能力 | 16 能力补齐 + 两段式异步 + 通知 + 图片桥 + 前台服务 | 能力逐项证据 + facts JSON |
 | P3 生态 | market/pnpm/git/fs-search | 装/卸闭环；clone/push；搜索可用 |

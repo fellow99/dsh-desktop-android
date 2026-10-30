@@ -1,6 +1,6 @@
 # 000-scaffold · 测试用例（test-cases.md）
 
-> 探针验收流程。证据全部进 `docs/010-P0门禁报告.md`；本文件只定义步骤与判据。
+> 探针验收流程。证据全部进 `docs/安卓环境能力清单-v0.2.1.md` §D.4（原 010 已并入）；本文件只定义步骤与判据。
 > 前置：真机（arm64-v8a，Android 11+）已连接 `adb`；已安装 `app-full-debug.apk`。
 
 ## TC-000-01 安装与冷启
@@ -58,6 +58,6 @@ adb shell run-as org.fellow99.dsh.android cat files/probe/engine.json
 
 ## TC-000-10 报告与清理
 
-1. 以上证据（截图 + JSON 片段 + 命令输出）写入 `docs/010-P0门禁报告.md`。
+1. 以上证据（截图 + JSON 片段 + 命令输出）写入 `docs/安卓环境能力清单-v0.2.1.md` §D.4（原 010 已并入）。
 2. 执行 `000-scaffold/plan.md` §4 探针清理清单。
 3. 更新 `SPECS_CHECKLIST.md` 与 `overall-test-cases.md` L1 状态。

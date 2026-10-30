@@ -50,9 +50,7 @@ adb install -r app/build/outputs/apk/full/debug/app-full-debug.apk
 ## 关键文档
 
 - [docs/000-工程规划.md](docs/000-工程规划.md) — 总体规划与实现状态
-- [docs/010-P0门禁报告.md](docs/010-P0门禁报告.md) — 三阶段门禁（G4 Intl 定论 → 复测 → P2/P3 落地）
-- [docs/安卓环境能力清单-v0.2.1.md](docs/安卓环境能力清单-v0.2.1.md) — 与 ark/hos 三路同表的能力矩阵与待办
-- [docs/020-任务登记册.md](docs/020-任务登记册.md) — 全部待办的编号登记（T-001…）
+- [docs/安卓环境能力清单-v0.2.1.md](docs/安卓环境能力清单-v0.2.1.md) — 与 ark/hos 三路同表的能力矩阵、待办（§D.2）、门禁记录（§D.4）、任务登记册（§D.5 T-001…）
 - [specs/README.md](specs/README.md) — 规格索引；[specs/constitution.md](specs/constitution.md) — C1–C14 宪法（诚实降级/零补丁/不伪造）
 
 ## 已实证能力速览（2026-10-29）
