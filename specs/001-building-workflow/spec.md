@@ -24,7 +24,7 @@
 | FR-001-3 | 载荷装配（云端）：上游三仓 ref 显式锁定（见 §4）；pnpm@11.28.5（对齐 harness `packageManager`）；产物 `app/src/main/assets/dsh-payload/{dsh.tar,dsh.version}` | Actions 日志含 `assemble-payload` 断言全过 + `package-payload` sha256 |
 | FR-001-4 | 版本注入：`v0.2.1` → `versionName=0.2.1`、`versionCode=MAJOR*10000+MINOR*100+PATCH`（=201，满足 FR-108-2 单调递增）；`package-payload` 的 `version=` 行 app 段同步注入（缺省回落现值，不改硬编码行为） | `aapt dump badging` 显示 versionName=0.2.1 / versionCode=201 |
 | FR-001-5 | APK 构建：JDK 17 + Android SDK（显式补装 `build-tools;36.0.0`、`platforms;android-36`）+ `:app:assembleFullDebug` | 构建成功且产出 `app-full-debug.apk` |
-| FR-001-6 | 发布：创建 GitHub Release（tag 同名）+ 附件 APK（命名含版本与 flavor）+ 摘要（`dsh.version` 内容、APK sha256）；同时上传 workflow artifact | Release 页可见 APK 可下载 |
+| FR-001-6 | 发布：创建 GitHub Release（tag 同名）+ 附件 APK（**发布名 `dsh-desktop-<version>.apk`**，不带变体后缀；2026-10-30 定名）+ 摘要（`dsh.version` 内容、APK sha256、签名证书指纹）；同时上传 workflow artifact | Release 页可见 `dsh-desktop-0.2.1.apk` 可下载 |
 | FR-001-7 | 可追溯性：上游 ref、引擎归档 sha256、载荷 sha256、APK sha256 全部在 run summary 输出 | summary 含四类指纹 |
 | FR-001-8 | release 签名（追加）：tag 触发构建 `:app:assembleFullRelease` 并经固定 release 密钥签名；密钥经 secrets（KEYSTORE_BASE64/KEYSTORE_PASSWORD/KEY_ALIAS/KEY_PASSWORD）物化，四件套缺一即失败（**不回落 debug**）；`workflow_dispatch` 彩排仍出 debug 包 | Run #7 的 release APK 经 apksigner 验证证书 SHA-256 固定；tag 且缺 secret 时构建失败 |
 | FR-001-9 | 签名材料零入库：`dsh-desktop-android.keystore`、`keystore.properties` gitignore（仅入库 `keystore.properties.sample`）；本地备份归责任人保管 | `git ls-files` 不含密钥/口令文件；sample 入库 |

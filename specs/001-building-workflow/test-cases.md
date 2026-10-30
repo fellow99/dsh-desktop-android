@@ -69,7 +69,7 @@
 - **优先级**：P1 ｜ **类型**：集成/发布 ｜ **层**：L2
 - **步骤**：
   1. 重打 tag `v0.2.1`（指向含 T6 的 main HEAD）→ Run #7 全绿
-  2. Release 附件为 **`dsh-0.2.1-release.apk`**（非 debug 命名）
+  2. Release 附件为 **`dsh-desktop-0.2.1.apk`**（发布名不含变体后缀；2026-10-30 定名，Run #7 前曾用 dsh-0.2.1-release.apk）
   3. 下载 APK → `apksigner verify --print-certs` 证书 SHA-256 == `06:ab:2f:93…`（与本地 keystore 一致，证明同一固定签名）
   4. Release notes 含签名证书指纹行
 - **预期**：四步全过；另验证负向门禁：删任一签名 secret 的 tag 构建应在 ⑩a 失败（静态审查 workflow 逻辑覆盖，不实操）

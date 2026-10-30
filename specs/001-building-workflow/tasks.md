@@ -46,3 +46,8 @@
 - [x] T6-4 GitHub Secrets 四项配置（gh secret set，已核验 list）
 - [x] T6-5 本地验证：`signingReport`（fullRelease→release config）+ `assembleFullRelease -PappVersionName=0.2.1 -PappVersionCode=201` + apksigner 证书 SHA-256 对账（TC-008）
 - [x] T6-6 重打 tag `v0.2.1`（→ 4703d6c）触发 Run #7 → 全绿，`dsh-0.2.1-release.apk`（185,508,348 B）上 Release，⑫b apksigner 云端证书对账一致（TC-009 PASS）
+
+## T7 发布产物改名（2026-10-30）
+
+- [x] T7-1 workflow ⑬ 产物名统一为 `dsh-desktop-<version>.apk`（去掉变体后缀；中间产物路径仍按变体 `app-full-<variant>.apk`）
+- [ ] T7-2 重打 tag `v0.2.1` → Run #8，Release 附件名为 `dsh-desktop-0.2.1.apk`（TC-009 再验，logs/20261030-2）
