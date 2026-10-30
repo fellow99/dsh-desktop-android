@@ -10,7 +10,7 @@
 - [x] T6-3 workflow ⑩a 注秘 + ⑪–⑮ variant 化（tag=release 强制签名；dispatch=debug）
 - [x] T6-4 四个 GitHub Secrets 配置（gh secret set/list 核验）
 - [x] T6-5 本地验证 signingReport + assembleFullRelease + apksigner（TC-008 PASS）
-- [ ] T6-6 重打 tag → Run #7（TC-009）
+- [x] T6-6 重打 tag v0.2.1（→4703d6c）→ Run #7（41091935880）全绿；Release 重建并发布 dsh-0.2.1-release.apk（185,508,348 B），⑫b 指纹对账一致（TC-009 PASS）
 
 ## 关键事实
 

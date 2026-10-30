@@ -45,4 +45,4 @@
 - [x] T6-3 workflow：⑩a 签名注秘步骤——tag 触发四 secrets（KEYSTORE_BASE64/KEYSTORE_PASSWORD/KEY_ALIAS/KEY_PASSWORD）缺一即失败并 `keytool -list` 预校验；`workflow_dispatch` 回落 debug；⑪ 改打 `assembleFullRelease`（BUILD_VARIANT 驱动）；⑫–⑮ 产物路径/命名（`dsh-<ver>-release.apk`）/Release notes 随变体
 - [x] T6-4 GitHub Secrets 四项配置（gh secret set，已核验 list）
 - [x] T6-5 本地验证：`signingReport`（fullRelease→release config）+ `assembleFullRelease -PappVersionName=0.2.1 -PappVersionCode=201` + apksigner 证书 SHA-256 对账（TC-008）
-- [ ] T6-6 重打 tag `v0.2.1` 触发 Run #7 → release APK 上 Release，apksigner 云端证书对账（TC-009）
+- [x] T6-6 重打 tag `v0.2.1`（→ 4703d6c）触发 Run #7 → 全绿，`dsh-0.2.1-release.apk`（185,508,348 B）上 Release，⑫b apksigner 云端证书对账一致（TC-009 PASS）
