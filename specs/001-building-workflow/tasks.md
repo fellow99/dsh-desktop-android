@@ -36,4 +36,13 @@
 - [x] T5-2 本地彩排：关键段本机执行（TC-004/005；引擎 URL/门禁口径实证见 REVIEW_REPORT）
 - [x] T5-3 Code Review（requesting-code-review → receiving-code-review）：5C/4I/5M 全部闭环（REVIEW_REPORT.md）
 - [x] T5-4 各阶段提交（git-commit 规范前缀：`docs` / `build` / `ci` / `fix` / `test`）
- - [x] T5-5 推送 main + 打 tag `v0.2.1` + 云端回归确认（TC-006）→ Run #6 全绿，Release v0.2.1 已发布 APK
+ - [x] T5-5 推送 main + 打 tag `v0.2.1` + 云端回归确认（TC-006）→ Run #6 全绿，Release v0.2.1 已发布 debug APK（附件事后丢失，见 20261030-1）
+
+## T6 release 正式签名（2026-10-30 追加，参考 oc-desktop-android）
+
+- [x] T6-1 生成 `dsh-desktop-android.keystore`（RSA 2048 / PKCS12 / alias=dsh-desktop-android / 有效期 10000 天）+ 本地 `keystore.properties`（gitignore）+ `keystore.properties.sample`（入库）
+- [x] T6-2 `app/build.gradle.kts`：读根目录 `keystore.properties`，有材料时注册 `signingConfigs.release` 并挂到 `buildTypes.release`；无材料时 release 不签名（本地无材料构建不炸）
+- [x] T6-3 workflow：⑩a 签名注秘步骤——tag 触发四 secrets（KEYSTORE_BASE64/KEYSTORE_PASSWORD/KEY_ALIAS/KEY_PASSWORD）缺一即失败并 `keytool -list` 预校验；`workflow_dispatch` 回落 debug；⑪ 改打 `assembleFullRelease`（BUILD_VARIANT 驱动）；⑫–⑮ 产物路径/命名（`dsh-<ver>-release.apk`）/Release notes 随变体
+- [x] T6-4 GitHub Secrets 四项配置（gh secret set，已核验 list）
+- [x] T6-5 本地验证：`signingReport`（fullRelease→release config）+ `assembleFullRelease -PappVersionName=0.2.1 -PappVersionCode=201` + apksigner 证书 SHA-256 对账（TC-008）
+- [ ] T6-6 重打 tag `v0.2.1` 触发 Run #7 → release APK 上 Release，apksigner 云端证书对账（TC-009）

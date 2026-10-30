@@ -88,3 +88,22 @@ workflow_dispatch：不注入 → 回落工程默认（0.1.0/1）——彩排语
 - C3 证据纪律：run summary + Actions 日志作为验收证据留档。
 - C10 敏感信息：workflow 无密钥；仅 `GITHUB_TOKEN`（`permissions: contents: write`）。
 - §13 二进制不入库：CI 现做现用，不落库。
+
+## 5. release 签名方案（2026-10-30 追加；参考 oc-desktop-android/build-release.yml）
+
+### 材料与保管
+
+- `dsh-desktop-android.keystore`：RSA 2048 / PKCS12 / alias `dsh-desktop-android` / store 与 key 同口令（28 字符随机）/ 有效期 10000 天（至 2054-03-18）。**不入库**（`.gitignore: *.keystore`），工程根本地留一份，责任人另行备份；证书 SHA-256 `06:ab:2f:93:c3:ef:ab:3d:2f:03:93:6b:3e:a1:59:cf:bf:54:47:d4:e4:68:b7:18:55:57:ab:5f:0e:84:1a:6a`。
+- `keystore.properties`（不入库）← `keystore.properties.sample`（入库模板）。
+- GitHub Secrets（fellow99/dsh-desktop-android，gh 配置）：`KEYSTORE_BASE64`（`base64 -w0` 编码）、`KEYSTORE_PASSWORD`、`KEY_ALIAS`、`KEY_PASSWORD`。
+
+### 构建接线
+
+- `app/build.gradle.kts`：根目录存在 `keystore.properties` 才注册 `signingConfigs.release` 并挂 `buildTypes.release`；缺失时 release 不签名（本地无材料不炸）。debug 变体仍用 AGP 默认 debug key。
+- workflow ⑩a：tag 触发——四 secret 缺一即红 + `keytool -list` 预校验口令/别名，随后解码 keystore、物化 properties，`BUILD_VARIANT=Release`；`workflow_dispatch`——`BUILD_VARIANT=Debug`（彩排路径保持可用，默认版本 0.1.0/1）。
+- ⑪ Gradle 任务与 ⑫–⑮ 路径/产物名全部由 `BUILD_VARIANT(_LC)` 派生：`assembleFullRelease` → `app/full/release/app-full-release.apk` → `dsh-<ver>-release.apk`；Release notes 增加证书 SHA-256 行。
+
+### 与历史 Run 的关系
+
+- Run #1–#6 为 debug 彩排版（`dsh-0.2.1-debug.apk`，runner 临时 debug key，不可覆盖升级）。
+- Run #7 起 tag 发布固定签名 release 包；v0.2.1 的 Release 经「先删后建」幂等步骤替换为 release APK。

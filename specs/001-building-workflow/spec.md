@@ -2,7 +2,7 @@
 
 > 需求编号：`001-building-workflow` ｜ 需求名称：GitHub Actions 的构建流程 ｜ 分支：不改动（`main`）
 > 依据：需求单（2026-10-29）；`docs/000-工程规划.md` §12（自分发）/§13（脚本与二进制不入库）；`specs/108-compliance-release`（FR-108-2 密钥不入库）
-> 状态：⬜ → 进行中
+> 状态：✅ 已发布（debug 彩排 Run #6）→ **追加 release 正式签名（2026-10-30，Run #7）**
 > 相关工程：`aosp-node-runtime`（引擎发布物）、`aosp-node-bridge`（Maven Central 依赖，构建期经 Gradle 解析，无 CI 特殊步骤）
 
 ## 1. 目标（Scope）
@@ -13,6 +13,7 @@
    - **载荷装配**（P1/P2/P3 管线）：deepseek-harness @ `dsh-v0.2.1-rc.2`（pnpm 构建）+ dsh-market @ `v1.66.42`（npm 构建）→ `assemble-payload --deploy --apply` → `package-payload`。
    - **APK 构建**：`:app:assembleFullDebug`（彩排版，debug 签名可直接侧载）。
 3. 版本注入：从 tag 派生 `versionName` / `versionCode`，并同步到载荷 `dsh.version` 元信息。
+4. **release 正式签名（2026-10-30 追加）**：tag 发布产出**固定密钥签名的 full/release APK**（可覆盖升级、可上架），替代原 debug 彩排包；签名材料零入库，经 GitHub Secrets 注入（实现 108 模块 FR-108-2 的 debug/release 签名分离）。
 
 ## 2. 功能需求
 
@@ -25,11 +26,13 @@
 | FR-001-5 | APK 构建：JDK 17 + Android SDK（显式补装 `build-tools;36.0.0`、`platforms;android-36`）+ `:app:assembleFullDebug` | 构建成功且产出 `app-full-debug.apk` |
 | FR-001-6 | 发布：创建 GitHub Release（tag 同名）+ 附件 APK（命名含版本与 flavor）+ 摘要（`dsh.version` 内容、APK sha256）；同时上传 workflow artifact | Release 页可见 APK 可下载 |
 | FR-001-7 | 可追溯性：上游 ref、引擎归档 sha256、载荷 sha256、APK sha256 全部在 run summary 输出 | summary 含四类指纹 |
+| FR-001-8 | release 签名（追加）：tag 触发构建 `:app:assembleFullRelease` 并经固定 release 密钥签名；密钥经 secrets（KEYSTORE_BASE64/KEYSTORE_PASSWORD/KEY_ALIAS/KEY_PASSWORD）物化，四件套缺一即失败（**不回落 debug**）；`workflow_dispatch` 彩排仍出 debug 包 | Run #7 的 release APK 经 apksigner 验证证书 SHA-256 固定；tag 且缺 secret 时构建失败 |
+| FR-001-9 | 签名材料零入库：`dsh-desktop-android.keystore`、`keystore.properties` gitignore（仅入库 `keystore.properties.sample`）；本地备份归责任人保管 | `git ls-files` 不含密钥/口令文件；sample 入库 |
 
 ## 3. 非目标（本期不做）
 
-- **release 变体与正式签名**：签名体系属 `specs/108-compliance-release` P4（FR-108-2 debug/release 签名分离）；本轮彩排以 debug 变体跑通全链。
-- store flavor 构建与 Play 发布。
+- ~~release 变体与正式签名~~ **已于 2026-10-30 追加实施（FR-001-8/9，实现 108/FR-108-2 签名分离部分）**；Play 上架签名（Play App Signing）仍属 108 P4。
+- store flavor 构建与 Play 发布（本流水线只构建 full flavor；store flavor 签名配置同样可用但不构建）。
 - 父工程（deepseek-harness-workspace）specs 不动——本模块文档只落 `dsh-desktop-android/specs/`。
 - 不改上游三仓（harness/market/runtime 均为只读 checkout）。
 - 不做 PR CI（main 推送不触发构建，仅 tag 触发 + 手动彩排）。
@@ -44,7 +47,7 @@
 
  ## 5. 约束
 
-- 密钥/凭证不入库（FR-108-2）；CI 仅用 `GITHUB_TOKEN`。
+- 密钥/凭证不入库（FR-108-2/FR-001-9）；CI 仅用 `GITHUB_TOKEN` + 四个签名 secrets；keystore 本地备份（工程根 `dsh-desktop-android.keystore`，gitignore）由责任人保管，丢失即无法发布同签名升级。
 - 二进制不入库（§13）：jniLibs、dsh-payload 仍由管线在构建期现做。
 - 分支不改动：全部工作提交在 `main`。
  - 体积核对：载荷随包后实测 debug 全量包 ≈145 MB（dsh.tar 经 APK zip 压缩，15656 文件），仍在 FR-108-5 ≤200MB 预算内；release 签名体系属 108 模块 P4。
