@@ -6,6 +6,7 @@ import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Intent
+import org.fellow99.dsh.android.R
 import android.os.Build
 import android.os.Environment
 import org.fellow99.dsh.android.BuildConfig
@@ -578,7 +579,7 @@ object HostCapabilities {
         // JS 侧（notify-android）发的是 body；兼容历史 text 字段
         val text = if (json.has("body")) json.optString("body", "") else json.optString("text", "")
         val notification = Notification.Builder(app, NOTIFY_CHANNEL)
-            .setSmallIcon(android.R.drawable.ic_dialog_info)
+            .setSmallIcon(R.drawable.ic_stat_dsh)
             .setContentTitle(title)
             .setContentText(text)
             .setStyle(Notification.BigTextStyle().bigText(text))

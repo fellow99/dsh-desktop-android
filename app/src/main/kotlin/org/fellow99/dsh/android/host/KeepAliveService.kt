@@ -103,7 +103,7 @@ class KeepAliveService : Service() {
             Notification.Builder(this)
         }
         return builder
-            .setSmallIcon(android.R.drawable.ic_dialog_info)
+            .setSmallIcon(R.drawable.ic_stat_dsh)
             .setContentTitle(title)
             .setContentText(text)
             .setOngoing(true)

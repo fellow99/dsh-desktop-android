@@ -102,6 +102,10 @@
     # 市场（P3）：desktopProfiles/desktopPnpm 契约 + 随包 pnpm 引擎
     - id: market-android
       name: '@dsh-android/market'
+    # 品牌位（205）：侧栏 logo/名称、会话空态 hero 品牌位、页面标题。
+    # 零补丁：Host 半边 webServer.tapIndex + index-inject；浏览器半边占 sidebar/hero 槽位。
+    - id: branding-android
+      name: '@dsh-android/branding'
 
 # ── 审批预设：需要"可隔离的执行器"（ctx.shell.sandboxMode 非空）。
 #    Android 没有内核隔离，执行器如实不声明 sandboxMode；上游 permission-presets
