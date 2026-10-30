@@ -1,13 +1,17 @@
 # 001-building-workflow · GitHub Actions 自动构建与发布
 #
-# 触发：push tag v*（首发 v0.2.1）→ 构建 full/debug APK（彩排版）并发布 GitHub Release。
-# 手动：workflow_dispatch（无 tag 时回落工程默认版本 0.1.0/1，仅用于彩排）。
+# 触发：push tag v*（首发 v0.2.1）→ 构建正式签名 full/release APK 并发布 GitHub Release。
+# 手动：workflow_dispatch（无 tag 时回落工程默认版本 0.1.0/1，构建 debug 签名包，仅用于彩排）。
 #
 # 三件套在云端现做（二进制不入库，docs/000-工程规划.md §13）：
 #   ① 引擎：aosp-node-runtime Release 归档（sha256 对账）→ 八项 ELF 门禁 → 投放 jniLibs
 #   ② 载荷：deepseek-harness @ dsh-v0.2.1-rc.2（pnpm）+ dsh-market @ v1.66.42（npm）
 #      → assemble-payload --deploy --apply → package-payload
-#   ③ APK：:app:assembleFullDebug（JDK 17，版本从 tag 注入）
+#   ③ APK：tag 触发 :app:assembleFullRelease（正式签名，版本从 tag 注入）；
+#          workflow_dispatch 彩排回落 :app:assembleFullDebug（AGP debug 签名）。
+# 签名（001 追加，参考 oc-desktop-android）：签名材料零入库（keystore.properties / *.keystore
+#   gitignore，模板 keystore.properties.sample）；CI 经 secrets KEYSTORE_BASE64 / KEYSTORE_PASSWORD
+#   / KEY_ALIAS / KEY_PASSWORD 物化。tag 发布四件套缺一即失败，不回落 debug。
 #
 # 上游 ref 锁定见 specs/001-building-workflow/spec.md §4。
 # 评审修复（logs/20261029-2/REVIEW_REPORT.md）：
@@ -34,7 +38,7 @@ concurrency:
 
 jobs:
   build:
-    name: Build APK (full/debug) & Release
+    name: Build APK (full/release signed) & Release
     runs-on: ubuntu-latest
     timeout-minutes: 120
     defaults:
@@ -49,6 +53,8 @@ jobs:
       DSH_MARKET_REF: v1.66.42
       PNPM_VERSION: '11.28.5'        # 对齐 deepseek-harness packageManager
       EXPECTED_ENGINE_NODE: '24.22.1' # 引擎配对：node-bridge 0.2.0 ↔ node 24.22.1
+      # release 签名证书指纹（非密文，公开可对账；keystore 本体不入库）
+      EXPECTED_SIGNER_SHA256: '06:AB:2F:93:C3:EF:AB:3D:2F:03:93:6B:3E:A1:59:CF:BF:54:47:D4:E4:68:B7:18:55:57:AB:5F:0E:84:1A:6A'
     steps:
       - name: ① Meta — 从 tag 派生版本
         id: meta
@@ -176,6 +182,34 @@ jobs:
           DSH_APP_VERSION="$APP_VERSION" \
             node scripts/package-payload.mjs --src build/payload-stage/root
 
+      - name: ⑩a 签名注秘（tag 强制 release 签名；dispatch 回落 debug）
+        env:
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+        run: |
+          if [[ "$GITHUB_REF_TYPE" == "tag" ]]; then
+            for v in KEYSTORE_BASE64 KEYSTORE_PASSWORD KEY_ALIAS KEY_PASSWORD; do
+              if [ -z "${!v}" ]; then
+                echo "::error::tag 发布必须配置签名 secrets（$v 为空）：仓库 Settings → Secrets and variables → Actions 配齐 KEYSTORE_BASE64 / KEYSTORE_PASSWORD / KEY_ALIAS / KEY_PASSWORD（keystore 用 base64 -w0 编码）"
+                exit 1
+              fi
+            done
+            echo "$KEYSTORE_BASE64" | base64 --decode > dsh-desktop-android.keystore
+            printf 'storeFile=dsh-desktop-android.keystore\nstorePassword=%s\nkeyAlias=%s\nkeyPassword=%s\n' \
+              "$KEYSTORE_PASSWORD" "$KEY_ALIAS" "$KEY_PASSWORD" > keystore.properties
+            # 校验 keystore 可打开且别名存在（密码错误在此提前红，不拖到 Gradle）
+            keytool -list -keystore dsh-desktop-android.keystore -storepass "$KEYSTORE_PASSWORD" -alias "$KEY_ALIAS" >/dev/null
+            echo "BUILD_VARIANT=Release" >> "$GITHUB_ENV"
+            echo "BUILD_VARIANT_LC=release" >> "$GITHUB_ENV"
+            echo "::notice::tag 发布：assembleFullRelease，正式签名（alias=$KEY_ALIAS）"
+          else
+            echo "BUILD_VARIANT=Debug" >> "$GITHUB_ENV"
+            echo "BUILD_VARIANT_LC=debug" >> "$GITHUB_ENV"
+            echo "::notice::workflow_dispatch 彩排：构建 debug 签名包（正式 release 签名仅 tag 触发）"
+          fi
+
       - name: ⑩ Setup JDK 17（Temurin）
         uses: actions/setup-java@v5
         with:
@@ -192,7 +226,7 @@ jobs:
           "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" \
             "build-tools;36.0.0" "platforms;android-36" > /dev/null
 
-      - name: ⑪ Gradle assembleFullDebug（tag 时注入版本）
+      - name: ⑪ Gradle assembleFull${BUILD_VARIANT}（tag 时 release 签名 + 注入版本）
         env:
           IS_TAG: ${{ steps.meta.outputs.is_tag }}
           APP_VERSION: ${{ steps.meta.outputs.version }}
@@ -202,7 +236,7 @@ jobs:
           if [[ "$IS_TAG" == "true" ]]; then
             ARGS+=("-PappVersionName=$APP_VERSION" "-PappVersionCode=$APP_VCODE")
           fi
-          ./gradlew :app:assembleFullDebug "${ARGS[@]}"
+          ./gradlew ":app:assembleFull${BUILD_VARIANT}" "${ARGS[@]}"
 
       - name: ⑫ aapt 断言版本元数据（aapt 输出 versionCode 在前）
         env:
@@ -210,13 +244,31 @@ jobs:
           APP_VERSION: ${{ steps.meta.outputs.version }}
           APP_VCODE: ${{ steps.meta.outputs.vcode }}
         run: |
-          APK=app/build/outputs/apk/full/debug/app-full-debug.apk
-          test -f "$APK" || { echo "::error::APK 未产出"; exit 1; }
+          APK=app/build/outputs/apk/full/${BUILD_VARIANT_LC}/app-full-${BUILD_VARIANT_LC}.apk
+          test -f "$APK" || { echo "::error::APK 未产出：$APK"; exit 1; }
           BADGING=$("$ANDROID_HOME/build-tools/36.0.0/aapt" dump badging "$APK")
           echo "$BADGING" | grep '^package:'
           if [[ "$IS_TAG" == "true" ]]; then
             echo "$BADGING" | grep -F "versionCode='$APP_VCODE' versionName='$APP_VERSION'" \
               || { echo "::error::版本注入未生效（期望 versionCode=$APP_VCODE versionName=$APP_VERSION）"; exit 1; }
+          fi
+
+      - name: ⑫b apksigner 验签（tag 时断言固定 release 证书指纹）
+        env:
+          EXPECTED_SIGNER_SHA256: ${{ env.EXPECTED_SIGNER_SHA256 }}
+        run: |
+          APK=app/build/outputs/apk/full/${BUILD_VARIANT_LC}/app-full-${BUILD_VARIANT_LC}.apk
+          "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --print-certs "$APK"
+          if [[ "$GITHUB_REF_TYPE" == "tag" ]]; then
+            # apksigner 输出无冒号小写 hex；两侧统一去冒号大写后比对
+            SIGNER=$("$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --print-certs "$APK" \
+              | awk -F': ' '/certificate SHA-256 digest/{print $2; exit}' | tr -d ':' | tr 'a-f' 'A-F')
+            EXPECTED=$(echo "$EXPECTED_SIGNER_SHA256" | tr -d ':' | tr 'a-f' 'A-F')
+            if [[ "$SIGNER" != "$EXPECTED" ]]; then
+              echo "::error::签名证书漂移：$SIGNER，期望 $EXPECTED"
+              exit 1
+            fi
+            echo "::notice::release 签名证书指纹核对通过：$SIGNER"
           fi
 
       - name: ⑬ 收集产物 + 指纹 summary
@@ -226,9 +278,9 @@ jobs:
           DSH_HARNESS_REF: ${{ env.DSH_HARNESS_REF }}
           DSH_MARKET_REF: ${{ env.DSH_MARKET_REF }}
         run: |
-          APK=app/build/outputs/apk/full/debug/app-full-debug.apk
+          APK=app/build/outputs/apk/full/${BUILD_VARIANT_LC}/app-full-${BUILD_VARIANT_LC}.apk
           REL_VERSION="${APP_VERSION:-0.1.0}"
-          NAME="dsh-${REL_VERSION}-debug.apk"
+          NAME="dsh-${REL_VERSION}-${BUILD_VARIANT_LC}.apk"
           mkdir -p dist
           cp "$APK" "dist/$NAME"
           cp app/src/main/assets/dsh-payload/dsh.version dist/dsh.version
@@ -264,6 +316,9 @@ jobs:
           DSH_HARNESS_REF: ${{ env.DSH_HARNESS_REF }}
           DSH_MARKET_REF: ${{ env.DSH_MARKET_REF }}
           NODE_RUNTIME_REF: ${{ env.NODE_RUNTIME_REF }}
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          EXPECTED_SIGNER_SHA256: ${{ env.EXPECTED_SIGNER_SHA256 }}
         run: |
           if [[ "$IS_TAG" != "true" ]]; then
             echo "非 tag 触发（彩排），跳过 Release。"
@@ -271,18 +326,20 @@ jobs:
           fi
           APK_SHA=$(sha256sum "dist/$APK_NAME" | cut -d' ' -f1)
           TAR_SHA=$(head -n1 dist/dsh.version | cut -d= -f2)
+          CERT_SHA256="$EXPECTED_SIGNER_SHA256"
           cat > notes.md <<EOF
-          dsh-desktop-android $APP_VERSION · full flavor / debug 签名（彩排版）/ arm64-v8a / Android 10+
+          dsh-desktop-android $APP_VERSION · full flavor / release 正式签名 / arm64-v8a / Android 10+
 
           ## 构建指纹
 
           | 项 | 值 |
           |---|---|
           | APK | \`$APK_NAME\`（sha256 \`$APK_SHA\`） |
+          | 签名 | 证书 SHA-256 \`$CERT_SHA256\`（alias \`$KEY_ALIAS\`） |
           | 载荷 | dsh.tar sha256 \`$TAR_SHA\`（dsh 0.2.1-rc.2 / node 24.22.1） |
           | 上游 | harness \`$DSH_HARNESS_REF\` / market \`$DSH_MARKET_REF\` / runtime lock \`$NODE_RUNTIME_REF\` |
 
-          侧载：下载 APK 直接安装。
+          侧载：下载 APK 直接安装；同密钥后续版本可覆盖升级。
           EOF
           # 重跑幂等：先删旧 Release（默认保留 git tag，勿加 --cleanup-tag），再重建
           gh release delete "$GITHUB_REF_NAME" -y || true

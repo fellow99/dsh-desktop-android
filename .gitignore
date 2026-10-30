@@ -27,6 +27,8 @@ render.experimental.xml
 # Keystore files
 *.jks
 *.keystore
+# 签名材料（不入库；模板见 keystore.properties.sample）
+keystore.properties
 
 # Google Services (e.g. APIs or Firebase)
 google-services.json
