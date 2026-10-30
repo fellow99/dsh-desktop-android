@@ -280,7 +280,8 @@ jobs:
         run: |
           APK=app/build/outputs/apk/full/${BUILD_VARIANT_LC}/app-full-${BUILD_VARIANT_LC}.apk
           REL_VERSION="${APP_VERSION:-0.1.0}"
-          NAME="dsh-${REL_VERSION}-${BUILD_VARIANT_LC}.apk"
+          # 统一发布名：不带变体后缀（tag=签名 release 包；dispatch 彩排同名，仅在 artifact 场景出现）
+          NAME="dsh-desktop-${REL_VERSION}.apk"
           mkdir -p dist
           cp "$APK" "dist/$NAME"
           cp app/src/main/assets/dsh-payload/dsh.version dist/dsh.version
