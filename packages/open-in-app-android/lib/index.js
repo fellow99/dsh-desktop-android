@@ -305,5 +305,86 @@ export function apply(ctx, config = {}) {
       }),
     `open-in-app: POST ${OPEN_IN_APP_OPEN_PATH}`,
   )
+
+  // ── T-009：文件导出/选取（宿主 SAF 两段式 fs.saveFile/fs.pickFiles 的 HTTP 调用方）──
+  // 这些路由即"上游接线"的本工程实现：不经上游，路由就是调用方。
+  const readFileB64UnderWorkspace = async (value) => {
+    const root = workspaceRoot()
+    if (root === undefined) return { error: { code: 'no-workspace', message: 'workspace root unavailable' } }
+    if (typeof value !== 'string' || value === '') return { error: { code: 'bad-request', message: 'path must be a non-empty string' } }
+    const abs = isAbsolute(value) ? value : `${root}/${value}`
+    if (!isPathUnder(abs, root)) return { error: { code: 'outside-workspace', message: 'path is outside the workspace fence' } }
+    let info
+    try {
+      info = await stat(abs)
+    } catch {
+      return { error: { code: 'not-found', message: `path does not exist: ${value}` } }
+    }
+    if (!info.isFile()) return { error: { code: 'bad-request', message: 'not a regular file' } }
+    if (info.size > 6 * 1024 * 1024) return { error: { code: 'payload-too-large', message: `file exceeds 6MB (${info.size}B); bridge cap is 8MB after base64` } }
+    const { readFile } = await import('node:fs/promises')
+    const data = (await readFile(abs)).toString('base64')
+    return { data, name: value.split('/').pop() ?? 'export.bin' }
+  }
+
+  ctx.effect(
+    () =>
+      ctx.webServer.register({
+        kind: 'exact',
+        path: '/_android/export-file',
+        handler: async (req, res) => {
+          if (rejected(req, res)) return
+          if (req.method !== 'POST') { methodNotAllowed(res, 'POST'); return }
+          let text
+          try {
+            text = await readBoundedBody(req)
+          } catch {
+            sendJson(res, 400, { code: 'bad-request', message: 'request body unreadable' })
+            return
+          }
+          if (text === null) { sendJson(res, 413, { code: 'payload-too-large', message: 'request body is too large' }); return }
+          let body
+          try { body = JSON.parse(text ?? 'null') } catch { body = null }
+          const file = await readFileB64UnderWorkspace(body?.path)
+          if (file.error !== undefined) { sendJson(res, file.error.code === 'not-found' ? 404 : 400, file.error); return }
+          try {
+            const result = await invokeHost('fs.saveFile', { data: file.data, name: file.name, mime: 'application/octet-stream' }, { timeoutMs: 600_000 })
+            sendJson(res, 200, { ok: true, ...result })
+          } catch (error) {
+            sendJson(res, 502, { ok: false, error: error instanceof Error ? error.message : String(error), hint: error?.hint })
+          }
+        },
+      }),
+    'open-in-app: POST /_android/export-file (T-009)',
+  )
+
+  ctx.effect(
+    () =>
+      ctx.webServer.register({
+        kind: 'exact',
+        path: '/_android/pick-file',
+        handler: async (req, res) => {
+          if (rejected(req, res)) return
+          if (req.method !== 'POST') { methodNotAllowed(res, 'POST'); return }
+          let text
+          try {
+            text = await readBoundedBody(req)
+          } catch {
+            sendJson(res, 400, { code: 'bad-request', message: 'request body unreadable' })
+            return
+          }
+          if (text === null) { sendJson(res, 413, { code: 'payload-too-large', message: 'request body is too large' }); return }
+          let body
+          try { body = JSON.parse(text ?? 'null') } catch { body = null }
+          try {
+            const result = await invokeHost('fs.pickFiles', { mime: typeof body?.mime === 'string' ? body.mime : '*/*', multiple: body?.multiple === true }, { timeoutMs: 600_000 })
+            sendJson(res, 200, { ok: true, ...result })
+          } catch (error) {
+            sendJson(res, 502, { ok: false, error: error instanceof Error ? error.message : String(error), hint: error?.hint })
+          }
+        },
+      }),
+    'open-in-app: POST /_android/pick-file (T-009)',
+  )
 }
 

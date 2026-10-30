@@ -446,6 +446,84 @@ function collectRipgrepStub(runTree) {
   log('@vscode/ripgrep-android-arm64 存根已物化（bin/rg 由 @dsh-android/subprocess 进程内接管）');
 }
 
+/** T-001（docs/020）：plugin-manager registry lookup 的进程内替身补丁。
+ * 上游 viewProfilePackage 走 execa 裸 spawn `pnpm view`（本平台必然失败）；
+ * 本补丁在 lookup 分支 feature-detect 宿主 `desktopPnpm.lookup`（@dsh-android/market 提供，
+ * worker 进程内跑 pnpm），存在即走进程内，保持 viewProfilePackage 的返回形状不变，
+ * registry 计划/超时/取消语义全部保留。此 diff 亦是向上游反哺的参考实现（specs/206 同类机制）。 */
+function patchPluginManagerLookup(runTree) {
+  const file = resolve(runTree, 'node_modules/@deepseek-ai/dsh-plugin-manager/lib/index.js');
+  if (!existsSync(file)) fail(1, `载荷里没有 dsh-plugin-manager：${file}`);
+  const text = readFileSync(file, 'utf8');
+  const MARK = 'DSH_ANDROID_DESKTOP_PNPM_LOOKUP';
+  if (text.includes(MARK)) {
+    log('补丁 T-001：plugin-manager desktopPnpm.lookup 已接管（幂等）');
+    return file;
+  }
+
+  // 锚点 1：viewProfilePackage 函数体结束处（return 行后补一个 helper）
+  const helperAnchor = `\tconst cause = result.exitCode === void 0 && !result.timedOut && !result.isCanceled ? Object.assign(new Error(result.shortMessage), { code: result.code }) : void 0;\n\treturn {\n\t\texitCode: result.exitCode ?? null,\n\t\tstdout: result.stdout,\n\t\tstderr: result.stderr,\n\t\ttimedOut: result.timedOut,\n\t\t...cause === void 0 ? {} : { cause }\n\t};\n}`;
+  const helperOccurrences = text.split(helperAnchor).length - 1;
+  if (helperOccurrences !== 1) fail(1, `T-001 helper 锚点不唯一或缺失（${helperOccurrences}）`);
+  const helper = `${helperAnchor}\n\n/* ${MARK}: 进程内 view——经宿主 desktopPnpm.lookup（worker 跑纯 JS pnpm），返回与 viewProfilePackage 相同的形状。 */\nasync function viewProfilePackageInProcess(desktop, dir, spec, options) {\n\tconst argv = ["view", spec, "name", "version", "description", "dsh", "--json", ...registryArguments(options.registry ?? null)];\n\tconst stdoutChunks = [];\n\tconst stderrChunks = [];\n\tconst pump = (stream, chunks) => new Promise((resolve) => {\n\t\tif (stream === void 0 || stream === null) return resolve();\n\t\tstream.on("data", (chunk) => chunks.push(typeof chunk === "string" ? chunk : chunk.toString()));\n\t\tstream.once("end", resolve);\n\t\tstream.once("error", resolve);\n\t});\n\tlet handle;\n\ttry {\n\t\thandle = desktop.lookup(argv, dir, options.signal);\n\t} catch (error) {\n\t\treturn { exitCode: null, stdout: "", stderr: String(error && error.message ? error.message : error), timedOut: false, cause: error };\n\t}\n\tconst collected = Promise.all([pump(handle.stdout, stdoutChunks), pump(handle.stderr, stderrChunks)]);\n\tlet timedOut = false;\n\tconst timer = setTimeout(() => { timedOut = true; try { handle.cancel(); } catch {} }, options.timeoutMs);\n\ttimer.unref?.();\n\tconst onAbort = () => { try { handle.cancel(); } catch {} };\n\toptions.signal?.addEventListener("abort", onAbort, { once: true });\n\tlet outcome;\n\ttry {\n\t\toutcome = await handle.done;\n\t} catch (error) {\n\t\tclearTimeout(timer);\n\t\toptions.signal?.removeEventListener("abort", onAbort);\n\t\tawait collected;\n\t\treturn { exitCode: null, stdout: stdoutChunks.join(""), stderr: stderrChunks.join("") || String(error && error.message ? error.message : error), timedOut: false, cause: error };\n\t}\n\tclearTimeout(timer);\n\toptions.signal?.removeEventListener("abort", onAbort);\n\tawait collected;\n\treturn {\n\t\texitCode: timedOut ? null : outcome.exitCode ?? null,\n\t\tstdout: stdoutChunks.join(""),\n\t\tstderr: stderrChunks.join(""),\n\t\ttimedOut,\n\t\t...outcome.signal === null || timedOut ? {} : { cause: Object.assign(new Error(\`terminated by \${String(outcome.signal)}\`), { code: outcome.signal }) }\n\t};\n}`;
+  const withHelper = text.replace(helperAnchor, helper);
+
+  // 锚点 2：registry lookup 调用点 → feature-detect 后分支（缩进自适应：deploy 后层级可能加深）
+  const callNeedle = 'const view = await viewProfilePackage(this.profile.dir, spec.trim(), {';
+  const callNeedleCount = withHelper.split(callNeedle).length - 1;
+  if (callNeedleCount !== 1) fail(1, `T-001 call 锚点不唯一或缺失（${callNeedleCount}）`);
+  const callStart = withHelper.indexOf(callNeedle);
+  const closeIdx = withHelper.indexOf('registry: current', callStart);
+  if (closeIdx < 0) fail(1, 'T-001 call 收尾锚点缺失');
+  const closeEnd = withHelper.indexOf('});', closeIdx);
+  if (closeEnd < 0) fail(1, 'T-001 call 结束锚点缺失');
+  const callEndAbs = closeEnd + '});'.length;
+  const lineStart = withHelper.lastIndexOf('\n', callStart) + 1;
+  const indent = withHelper.slice(lineStart, callStart);
+  const inner = `${indent}\t`;
+  const callText = withHelper.slice(callStart + 'const view = '.length, callEndAbs);
+  const callPatch = `/* ${MARK}: 宿主发布 desktopPnpm.lookup 时走进程内 view（本平台无可执行 pnpm）。 */\n${indent}const desktopPnpm = (() => { try { return typeof this.ownerContext?.get === "function" ? this.ownerContext.get("desktopPnpm") ?? null : null } catch { return null } })();\n${indent}const view = desktopPnpm !== null && typeof desktopPnpm.lookup === "function"\n${inner}? await viewProfilePackageInProcess(desktopPnpm, this.profile.dir, spec.trim(), {\n${inner}\ttimeoutMs: this.inspectTimeoutMs,\n${inner}\t...signal === void 0 ? {} : { signal },\n${inner}\tregistry: current\n${inner}})\n${indent}: ${callText}`;
+  const patched = `${withHelper.slice(0, lineStart)}${callPatch}${withHelper.slice(callEndAbs)}`;
+  writeFileSync(file, patched);
+  if (!readFileSync(file, 'utf8').includes(MARK)) fail(1, `T-001 补丁后标记缺失：${file}`);
+  log('补丁 T-001：plugin-manager lookup feature-detect desktopPnpm.lookup（进程内 view）');
+  return file;
+}
+
+/** T-004（docs/020）：ctx.fs 原语补齐的物化期补丁——在 fs-local 的 LocalFileSystem
+ * 原型上补 remove/move/copy/chmod（机械函数 fs-local 已 import 或动态引入，统一经
+ * this.resolve(displayPath) 取 targetKey），并在 fs-sandbox 的 SandboxedFileSystem
+ * 原型上加围栏包装（写语义走 checkedTarget：read-only 拒绝、workspace-write 含包含校验）。
+ * 已知边界（如实登记）：remove 仅普通文件（目录递归删除待需求）；move/copy 仅普通文件。
+ * 消费方：任何注入 ctx.fs 的插件/未来工具（上游 tool-fs 尚无调用点，T-004 登记为待上游消费面）。 */
+function patchFsPrimitives(runTree) {
+  const localFile = resolve(runTree, 'node_modules/@deepseek-ai/dsh-fs-local/lib/index.js');
+  const sandboxFile = resolve(runTree, 'node_modules/@deepseek-ai/dsh-fs-sandbox/lib/index.js');
+  if (!existsSync(localFile)) fail(1, `载荷里没有 dsh-fs-local：${localFile}`);
+  if (!existsSync(sandboxFile)) fail(1, `载荷里没有 dsh-fs-sandbox：${sandboxFile}`);
+
+  const MARK = 'DSH_ANDROID_FS_PRIMITIVES';
+  const localText = readFileSync(localFile, 'utf8');
+  if (!localText.includes(MARK)) {
+    const exportAnchor = 'export { LocalFileSystem, LocalFileSystem as default };';
+    if (localText.split(exportAnchor).length - 1 !== 1) fail(1, `T-004 fs-local export 锚点不唯一或缺失`);
+    const localPatch = `\n/* ${MARK}: ctx.fs 写原语补齐（remove/move/copy/chmod）。resolve(displayPath) 与同类方法同源。 */\nObject.assign(LocalFileSystem.prototype, {\n\tasync remove(displayPath, signal) {\n\t\tconst target = await this.resolve(displayPath);\n\t\tsignal?.throwIfAborted();\n\t\tawait rm(target.targetKey, { force: false, recursive: false });\n\t\treturn { ok: true, path: target.displayPath };\n\t},\n\tasync move(fromDisplay, toDisplay, signal) {\n\t\tconst from = await this.resolve(fromDisplay);\n\t\tconst to = await this.resolve(toDisplay);\n\t\tsignal?.throwIfAborted();\n\t\tconst { mkdir } = await import("node:fs/promises");\n\t\tconst { dirname } = await import("node:path");\n\t\tawait mkdir(dirname(to.targetKey), { recursive: true });\n\t\tawait rename(from.targetKey, to.targetKey);\n\t\treturn { ok: true, from: from.displayPath, to: to.displayPath };\n\t},\n\tasync copy(fromDisplay, toDisplay, signal) {\n\t\tconst from = await this.resolve(fromDisplay);\n\t\tconst to = await this.resolve(toDisplay);\n\t\tsignal?.throwIfAborted();\n\t\tconst { mkdir, copyFile } = await import("node:fs/promises");\n\t\tconst { dirname } = await import("node:path");\n\t\tawait mkdir(dirname(to.targetKey), { recursive: true });\n\t\tawait copyFile(from.targetKey, to.targetKey);\n\t\treturn { ok: true, from: from.displayPath, to: to.displayPath, size: (await stat(to.targetKey)).size };\n\t},\n\tasync chmod(displayPath, mode, signal) {\n\t\tconst target = await this.resolve(displayPath);\n\t\tsignal?.throwIfAborted();\n\t\tawait chmod(target.targetKey, mode);\n\t\treturn { ok: true, path: target.displayPath, mode };\n\t},\n});\n`;
+    writeFileSync(localFile, localText.replace(exportAnchor, `${localPatch}\n${exportAnchor}`));
+    if (!readFileSync(localFile, 'utf8').includes(MARK)) fail(1, `T-004 fs-local 补丁后标记缺失`);
+    log('补丁 T-004a：dsh-fs-local LocalFileSystem 补 remove/move/copy/chmod 原型');
+  }
+
+  const sandboxText = readFileSync(sandboxFile, 'utf8');
+  if (!sandboxText.includes(MARK)) {
+    const exportAnchor = 'export { SandboxedFileSystem, SandboxedFileSystem as default };';
+    if (sandboxText.split(exportAnchor).length - 1 !== 1) fail(1, `T-004 fs-sandbox export 锚点不唯一或缺失`);
+    const sandboxPatch = `\n/* ${MARK}: 原语的围栏包装——写语义统一走 checkedTarget（read-only 拒 / workspace-write 包含校验）。 */\nObject.assign(SandboxedFileSystem.prototype, {\n\tasync remove(displayPath, sandboxPolicy, signal) {\n\t\tconst target = await this.checkedTarget(displayPath, sandboxPolicy);\n\t\treturn super.remove(target.displayPath, signal);\n\t},\n\tasync move(fromDisplay, toDisplay, sandboxPolicy, signal) {\n\t\tconst from = await this.checkedTarget(fromDisplay, sandboxPolicy);\n\t\tconst to = await this.checkedTarget(toDisplay, sandboxPolicy);\n\t\treturn super.move(from.displayPath, to.displayPath, signal);\n\t},\n\tasync copy(fromDisplay, toDisplay, sandboxPolicy, signal) {\n\t\tconst to = await this.checkedTarget(toDisplay, sandboxPolicy);\n\t\treturn super.copy(fromDisplay, to.displayPath, signal);\n\t},\n\tasync chmod(displayPath, mode, sandboxPolicy, signal) {\n\t\tconst target = await this.checkedTarget(displayPath, sandboxPolicy);\n\t\treturn super.chmod(target.displayPath, mode, signal);\n\t},\n});\n`;
+    writeFileSync(sandboxFile, sandboxText.replace(exportAnchor, `${sandboxPatch}\n${exportAnchor}`));
+    if (!readFileSync(sandboxFile, 'utf8').includes(MARK)) fail(1, `T-004 fs-sandbox 补丁后标记缺失`);
+    log('补丁 T-004b：dsh-fs-sandbox 原语围栏包装（checkedTarget 语义）');
+  }
+}
+
 /** 201：物化 dshmarket（lib+client+运行时依赖闭包；@deepseek-ai/* 由宿主闭包提供）。 */
 function collectDshMarket(runTree) {
   const dest = resolve(runTree, 'node_modules/dshmarket');
@@ -555,6 +633,8 @@ function overlay(runTree) {
   assertGitClosure(runTree);
   try { collectMarketPNPM(runTree); } catch (e) { fail(1, `012 物化失败：${e.message}`); }
   try { collectRipgrepStub(runTree); } catch (e) { fail(1, `206 rg 存根物化失败：${e.message}`); }
+  try { patchPluginManagerLookup(runTree); } catch (e) { fail(1, `T-001 补丁失败：${e.message}`); }
+  try { patchFsPrimitives(runTree); } catch (e) { fail(1, `T-004 补丁失败：${e.message}`); }
   try { collectDshMarket(runTree); } catch (e) { fail(1, `201 物化失败：${e.message}`); }
 
   // 3) 垫片（§5.3 白名单）

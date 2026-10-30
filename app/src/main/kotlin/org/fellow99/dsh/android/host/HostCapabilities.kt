@@ -46,7 +46,10 @@ object HostCapabilities {
         private val seq = AtomicLong(0)
 
         fun create(kind: String = "allFiles"): String =
-            "slot-${seq.incrementAndGet()}-${System.currentTimeMillis()}".also { map[it] = Slot(kind) }
+            "slot-${seq.incrementAndGet()}-${System.currentTimeMillis()}".also {
+                map[it] = Slot(kind)
+                AppLog.line("info", "slot", "create id=$it kind=$kind")
+            }
         fun get(id: String): Slot? {
             val s = map[id] ?: return null
             // TTL 按 kind 区分：perm 设置页往返 5 分钟；SAF 选文件（浏览/多选/重命名）放宽到 15 分钟
@@ -57,7 +60,21 @@ object HostCapabilities {
         fun remove(id: String) { map.remove(id) }
 
         /** 原子取走（防并发轮询双消费同一结果）。 */
-        fun take(id: String): Slot? = map.remove(id)
+        fun take(id: String): Slot? {
+            val slot = map.remove(id)
+            if (slot !== null) {
+                // TTL 在取走路径生效（轮询走 take，不再经过 get）：perm 5min / SAF 15min
+                val ttlMs = if (slot.kind == "pickFiles" || slot.kind == "saveFile") 15 * 60_000 else 5 * 60_000
+                if (slot.state == State.PENDING && System.currentTimeMillis() - slot.createdAt > ttlMs) slot.state = State.EXPIRED
+            }
+            AppLog.line("info", "slot", "take id=$id state=${slot?.state ?: "ABSENT"}")
+            return slot
+        }
+
+        /** 轮询 pending 分支的放回（take 已移除，重新入表并保留 createdAt/kind）。 */
+        fun putBack(id: String, slot: Slot) {
+            map[id] = slot
+        }
         fun completeAllFiles(id: String, granted: Boolean) {
             map[id]?.let {
                 it.resultJson = """{"granted":$granted}"""
@@ -106,6 +123,7 @@ object HostCapabilities {
 
     /** SAF 委托页回调入口：完成任意槽位（host.result 轮询方随后取走结果）。 */
     fun completeSlot(id: String, resultJson: String) {
+        AppLog.line("info", "slot", "completeSlot id=$id json=${resultJson.take(120)}")
         PendingSlots.complete(id, resultJson)
     }
 
@@ -189,7 +207,7 @@ object HostCapabilities {
                 val slot = PendingSlots.take(id) ?: return@guard """{"ok":true,"state":"expired"}"""
                 when (slot.state) {
                     PendingSlots.State.PENDING -> {
-                        PendingSlots.complete(id, slot.resultJson) // 放回（仍 pending）
+                        PendingSlots.putBack(id, slot) // 放回（仍 pending，保留 createdAt/kind）
                         """{"ok":true,"state":"pending"}"""
                     }
                     PendingSlots.State.DONE -> """{"ok":true,"state":"done","result":${slot.resultJson}}"""

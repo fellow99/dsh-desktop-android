@@ -18,6 +18,7 @@
 import { existsSync, readFileSync, statSync, writeFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { isAbsolute, join } from 'node:path'
+import { PassThrough } from 'node:stream'
 import {
   assertPnpmEngine,
   getLastRun,
@@ -54,6 +55,89 @@ export function launchedProfile(profileContext) {
     return null
   }
   return { name: profileName === '' ? 'ohos' : profileName, dir }
+}
+
+/**
+ * registry 直连 view（T-001 最后一公里）：pnpm 10 的 `view` 内部 passThruToNpm
+ * （spawnSync npm，本平台无 npm），因此 registry 元数据查询绕过 pnpm，直接
+ * fetch `<registry>/<name>` 全量 packument（undici 进程内），按上游解析器期望
+ * 合成 `pnpm view --json` 输出（含 name/version/description/dsh 的对象）。
+ *
+ * 支持形态（上游 tool-fs… plugin-manager 的 argv）：`view <name[@range]> [fields…]
+ * [--json] [--registry=<url>]`；@scope 名称按 npm 规则编码。精确版本按 spec 取，
+ * 否则取 dist-tags.latest。404 → stderr E404 + exit 1（上游归类 not-found）。
+ *
+ * @param {string[]} argv - 完整 lookup argv（argv[0]='view'）。
+ * @param {AbortSignal} [signal]
+ * @returns {{ stdout: PassThrough, stderr: PassThrough, done: Promise<{exitCode: number|null, signal: null}>, cancel: () => void }}
+ */
+export function viewViaRegistry(argv, signal) {
+  const stdout = new PassThrough()
+  const stderr = new PassThrough()
+  const ac = new AbortController()
+  const onOuterAbort = () => ac.abort()
+  signal?.addEventListener('abort', onOuterAbort, { once: true })
+
+  const done = (async () => {
+    let spec = ''
+    let registry = process.env.DSH_ANDROID_REGISTRY || 'https://registry.npmmirror.com'
+    for (let i = 1; i < argv.length; i += 1) {
+      const arg = argv[i]
+      if (arg === '--json' || arg === '--no-config' || arg === '--config.fetch-retries=0') continue
+      if (arg.startsWith('--registry=')) { registry = arg.slice('--registry='.length); continue }
+      if (arg.startsWith('--')) continue
+      if (spec === '') spec = arg
+    }
+    const at = spec.lastIndexOf('@')
+    const name = at > 0 ? spec.slice(0, at) : spec
+    const wantedVersion = at > 0 ? spec.slice(at + 1) : null
+    const write = (stream, text) => {
+      if (text !== '') stream.write(text)
+      stream.end()
+    }
+    try {
+      if (name === '') throw new Error('empty package name')
+      const url = `${registry.replace(/\/+$/, '')}/${name.replaceAll('/', '%2F')}`
+      const response = await fetch(url, { signal: ac.signal, headers: { accept: 'application/json' } })
+      if (response.status === 404) {
+        write(stderr, `npm error code E404\nnpm error 404 Not Found - GET ${url}\n`)
+        return { exitCode: 1, signal: null }
+      }
+      if (!response.ok) {
+        write(stderr, `npm error registry answered ${response.status} for ${url}\n`)
+        return { exitCode: 1, signal: null }
+      }
+      const doc = await response.json()
+      const latest = doc?.['dist-tags']?.latest ?? null
+      const version = wantedVersion ?? latest
+      const manifest = version !== null && doc?.versions?.[version] !== undefined ? doc.versions[version] : null
+      if (version === null || manifest === null) {
+        write(stderr, `npm error code E404\nnpm error 404 Not Found - no matching version for ${spec}\n`)
+        return { exitCode: 1, signal: null }
+      }
+      const answer = {
+        name: doc.name ?? name,
+        version,
+        description: doc.description ?? manifest.description ?? '',
+        dsh: manifest.dsh ?? doc.dsh,
+      }
+      write(stdout, `${JSON.stringify([answer])}\n`)
+      return { exitCode: 0, signal: null }
+    } catch (error) {
+      if (ac.signal.aborted) return { exitCode: null, signal: null }
+      write(stderr, `npm error registry query failed: ${error instanceof Error ? error.message : String(error)}\n`)
+      return { exitCode: 1, signal: null }
+    } finally {
+      signal?.removeEventListener('abort', onOuterAbort)
+    }
+  })()
+
+  return {
+    stdout,
+    stderr,
+    done,
+    cancel: () => ac.abort(),
+  }
 }
 
 /**
@@ -232,6 +316,10 @@ export function apply(ctx) {
      */
     lookup(args, _invokingDir, signal) {
       const argv = Array.isArray(args) ? args.map((value) => String(value)) : []
+      // pnpm 10 的 `view` 内部 spawnSync npm（passThruToNpm）——本平台无 npm 可执行。
+      // registry 元数据查询改为直连 registry（undici 进程内），输出合成 pnpm view --json 形状；
+      // 其余 view 之外的命令维持 worker 路径。
+      if (argv[0] === 'view') return viewViaRegistry(argv, signal)
       return runPnpmInProcess(argv, { dir: launched.dir, signal })
     },
     /** Engine readiness (the desktop branch never reads this; kept for diagnostics). */

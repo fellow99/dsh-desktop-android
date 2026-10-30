@@ -141,6 +141,8 @@ object DshRuntime {
                 "DSH_ANDROID_APP_LOG" to File(dshHome, "${Constants.DIR_LOGS}/app.log").absolutePath,
                 "DSH_PERMISSION_MODE" to "workspace-write",
                 // P2-6 诊断端点：仅 debug 构建开启 /_android/facts（release 恒关，FR-105-013）
+                // CN 网络：npmjs 直连慢/挂（2026-10-29 实测），registry 默认走镜像（--registry 显式指定时覆盖）
+                "DSH_ANDROID_REGISTRY" to "https://registry.npmmirror.com",
                 "DSH_ANDROID_FACTS" to if (BuildConfig.DEBUG) "1" else "0",
                 "TMPDIR" to File(filesDir, Constants.DIR_TMP).absolutePath,
             ),

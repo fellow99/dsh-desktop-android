@@ -204,6 +204,20 @@ export function collectFacts(ctx, env = process.env, globalObject = globalThis) 
     webServer: { port, origin },
     bundleRows: readBundleRows(ctx),
     bundleRowsNote: 'rows reflect loader.store at call time; the full composition is applied by the loader at boot (see bootstrap `[bundle]` logs)',
+    ctxFs: (() => {
+      try {
+        const fsService = typeof ctx?.get === 'function' ? ctx.get('fs') : ctx?.fs
+        return {
+          present: fsService !== undefined && fsService !== null,
+          remove: typeof fsService?.remove === 'function',
+          move: typeof fsService?.move === 'function',
+          copy: typeof fsService?.copy === 'function',
+          chmod: typeof fsService?.chmod === 'function',
+        }
+      } catch {
+        return { present: false, note: 'ctx.fs unavailable' }
+      }
+    })(),
     env: environment.values,
     redactedEnv: environment.redacted,
     shims: readShims(env, globalObject),
