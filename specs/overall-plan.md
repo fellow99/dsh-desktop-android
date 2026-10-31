@@ -13,7 +13,7 @@
 | 104 能力桥 | 冻结命名 16 项；两段式异步（pending + host.result 轮询）；handler 永不抛 | 桥 JNI 槽位表 |
 | 105 上游适配 | `android` profile 播种 + `@dsh-android/bundle` YAML 覆盖层（只允许 disabled/换名/insert） | 上游 bundle 键名实测 |
 | 106–109 | 按规划 §5.2/§6.4/§6.6/§6.7 实施，先探针后定版 | 101/104 |
-| 012/201/204/206 | 从 ark 复制改名 `@dsh-android/*`，去 jitless/undici 相关（JIT 可用） | 105 |
+| 110/201/204/206 | 从 ark 复制改名 `@dsh-android/*`，去 jitless/undici 相关（JIT 可用） | 105 |
 
 ## 二、引擎与依赖决策（含偏差登记）
 

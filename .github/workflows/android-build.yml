@@ -1,4 +1,4 @@
-# 001-building-workflow · GitHub Actions 自动构建与发布
+# 012-building-workflow · GitHub Actions 自动构建与发布
 #
 # 触发：push tag v*（首发 v0.2.1）→ 构建正式签名 full/release APK 并发布 GitHub Release。
 # 手动：workflow_dispatch（无 tag 时回落工程默认版本 0.1.0/1，构建 debug 签名包，仅用于彩排）。
@@ -13,7 +13,7 @@
 #   gitignore，模板 keystore.properties.sample）；CI 经 secrets KEYSTORE_BASE64 / KEYSTORE_PASSWORD
 #   / KEY_ALIAS / KEY_PASSWORD 物化。tag 发布四件套缺一即失败，不回落 debug。
 #
-# 上游 ref 锁定见 specs/001-building-workflow/spec.md §4。
+# 上游 ref 锁定见 specs/012-building-workflow/spec.md §4。
 # 评审修复（logs/20261029-2/REVIEW_REPORT.md）：
 #   - 引擎 lock 源锁 origin/main@605715e7（tag v24.22.1 的 lock 仍是 active=24.2.0），
 #     并断言 lock.active.node == 24.22.1（与 node-bridge 0.2.0 的引擎配对）；
@@ -215,13 +215,13 @@ jobs:
         with:
           distribution: temurin
           java-version: '17'
-          # 001-building-workflow（CI run#3/#4 教训）：cache: gradle 的 save 预处理会深扫工作区，
+          # 012-building-workflow（CI run#3/#4 教训）：cache: gradle 的 save 预处理会深扫工作区，
           # 在 upstream/deepseek-harness 的 pnpm node_modules 符号链接环上 ELOOP（收窄
           # cache-dependency-path 也无效）。发布型流水线构建频率低，Gradle 依赖重装成本可接受，
           # 故不启用 Gradle 缓存。
       - name: ⑩ 补装 Android SDK 组件（build-tools 36.0.0 / platform 36）
         run: |
-          # 001-building-workflow（CI run#5 教训）：默认 shell 带 -o pipefail，`yes |` 会让
+          # 012-building-workflow（CI run#5 教训）：默认 shell 带 -o pipefail，`yes |` 会让
           # sdkmanager 正常退出后因 SIGPIPE 判败；托管 runner 许可证已预接受，直接调用即可。
           "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" \
             "build-tools;36.0.0" "platforms;android-36" > /dev/null

@@ -1,4 +1,4 @@
-# 001-building-workflow · 技术方案（plan.md）
+# 012-building-workflow · 技术方案（plan.md）
 
 > 对应 [spec.md](./spec.md)。落地物：`.github/workflows/android-build.yml` + 版本注入两处小改。
 
@@ -9,7 +9,7 @@
 | `.github/workflows/android-build.yml` | 新增 | 单 job 流水线（详见 §2） |
 | `app/build.gradle.kts` | 修改（~4 行） | `versionName`/`versionCode` 支持Gradle 属性覆盖，缺省回落现值（0.1.0/1） |
 | `scripts/package-payload.mjs` | 修改（~3 行） | `version=` 行 app 段支持 `DSH_APP_VERSION` 环境变量覆盖，缺省回落 `0.1.0` |
-| `specs/001-building-workflow/` | 新增 | 本四件套 |
+| `specs/012-building-workflow/` | 新增 | 本四件套 |
 
 ## 2. 流水线结构（单 job：`build` / `ubuntu-latest` / `timeout 120min`）
 
@@ -31,10 +31,10 @@
  ⑩ setup-java 17（Temurin，无 Gradle 缓存）+ sdkmanager 补装 build-tools;36.0.0 / platforms;android-36
 ⑪ ./gradlew :app:assembleFullDebug
     -PappVersionName=0.2.1 -PappVersionCode=201（tag 触发时由 ref 派生；dispatch 不注入）
-⑫ aapt dump badging 验证 versionName/versionCode（FR-001-4 验收）
+⑫ aapt dump badging 验证 versionName/versionCode（FR-012-4 验收）
 ⑬ 收集产物：app/build/outputs/apk/full/debug/*.apk → 改名 dsh-<ver>-debug.apk + sha256
 ⑭ upload-artifact（APK + dsh.version）
-⑮ gh release create（tag 触发时；附 APK + release notes 指纹摘要，FR-001-7）
+⑮ gh release create（tag 触发时；附 APK + release notes 指纹摘要，FR-012-7）
 ```
 
 ### 关键环境

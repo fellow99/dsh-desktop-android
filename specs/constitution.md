@@ -100,3 +100,26 @@
 
 - `host.register` 的 handler：JSON 进、JSON 出；异常 → `{ok:false,error,hint}`；结果 ≤ 64 KiB。
 - **违反症状**：桥日志出现 `handler-threw`；能力返回半截 JSON。
+
+---
+
+## 五、规范编号与文档分工（继承父工程宪法，2026-11-01）
+
+### C15 编号分层
+
+- **0XX = 各子工程公共、共同的需求模块**：`011-version-<VERSION>`（版本更新，原 `101-version-*`）、`012-building-workflow`（构建工作流）、`013-branding`（品牌化，原 `010-assets` 并入）。公共模块的整体规范在父工程 `specs/`，本工程只写自己的实现。
+- **1XX = 本工程基础功能模块**：本工程是编号基准（`101 runtime-launch` / `102 payload` / `103 webview-shell` / `104 host-capability` / `105 upstream-adapter` / `106 workspace-picker` / `107 diagnostics` / `108 compliance` / `109 agent-keepalive` / `110 pnpm`）。原 `012-pnpm-integration` 改为 `110-pnpm-integration`，释放 `012` 给构建工作流；原 `001-building-workflow` 改为 `012-building-workflow`。
+- **2XX = 补丁/插件模块**：与兄弟工程对齐；本工程为 `201/204/205/206`。
+- `000-scaffold` 为工程搭建基线，保留 `000` 例外编号，不参与 0XX 公共模块编号。
+
+### C16 文档分工
+
+- 父工程 `specs/` 关注整体规划、整体设计与各子工程共同需求。
+- 本工程 `specs/` 关注本工程具体技术实现与独立需求，不重复父工程的 overall 级内容。
+- `013-branding`（应用级图标/名称/通知图标）与 `205-plugin-branding`（Web UI 品牌位）职责分离；应用名必须一致。
+
+### C17 编号即契约
+
+- 目录名、`spec.md`/`plan.md` 的 `FR-*` 前缀、README 索引、`SPECS_CHECKLIST.md` 必须一致。
+- 新增/改号模块必须同时更新本文件、`README.md`、`SPECS_CHECKLIST.md` 与父工程索引。
+- 违反症状：`specs/` 有目录但 README/清单无条目，或 `FR-*` 前缀与目录号不一致。

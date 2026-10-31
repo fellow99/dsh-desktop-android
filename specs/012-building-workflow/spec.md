@@ -1,6 +1,6 @@
-# 001-building-workflow · 功能规格（spec.md）
+# 012-building-workflow · 功能规格（spec.md）
 
-> 需求编号：`001-building-workflow` ｜ 需求名称：GitHub Actions 的构建流程 ｜ 分支：不改动（`main`）
+> 需求编号：`012-building-workflow` ｜ 需求名称：GitHub Actions 的构建流程 ｜ 分支：不改动（`main`）
 > 依据：需求单（2026-10-29）；`docs/000-工程规划.md` §12（自分发）/§13（脚本与二进制不入库）；`specs/108-compliance-release`（FR-108-2 密钥不入库）
 > 状态：✅ 已发布（debug 彩排 Run #6）→ **追加 release 正式签名（2026-10-30，Run #7）**
 > 相关工程：`aosp-node-runtime`（引擎发布物）、`aosp-node-bridge`（Maven Central 依赖，构建期经 Gradle 解析，无 CI 特殊步骤）
@@ -19,21 +19,21 @@
 
 | # | 需求 | 验收 |
 |---|---|---|
-| FR-001-1 | 触发：`push` tag `v*`；另支持 `workflow_dispatch` 手动彩排（无 tag 时回落工程默认版本） | 首跑由 tag `v0.2.1` 触发成功 |
-| FR-001-2 | 引擎投放（云端）：下载归档（`runtime.lock.json` 锁定 URL + `archiveSha256` 校验）→ 八项 ELF 门禁 → 投放 jniLibs | Actions 日志含门禁 8×✔ 与 `provision-engine` 投放完成 |
-| FR-001-3 | 载荷装配（云端）：上游三仓 ref 显式锁定（见 §4）；pnpm@11.28.5（对齐 harness `packageManager`）；产物 `app/src/main/assets/dsh-payload/{dsh.tar,dsh.version}` | Actions 日志含 `assemble-payload` 断言全过 + `package-payload` sha256 |
-| FR-001-4 | 版本注入：`v0.2.1` → `versionName=0.2.1`、`versionCode=MAJOR*10000+MINOR*100+PATCH`（=201，满足 FR-108-2 单调递增）；`package-payload` 的 `version=` 行 app 段同步注入（缺省回落现值，不改硬编码行为） | `aapt dump badging` 显示 versionName=0.2.1 / versionCode=201 |
-| FR-001-5 | APK 构建：JDK 17 + Android SDK（显式补装 `build-tools;36.0.0`、`platforms;android-36`）+ `:app:assembleFullDebug` | 构建成功且产出 `app-full-debug.apk` |
-| FR-001-6 | 发布：创建 GitHub Release（tag 同名）+ 附件 APK（**发布名 `dsh-desktop-<version>.apk`**，不带变体后缀；2026-10-30 定名）+ 摘要（`dsh.version` 内容、APK sha256、签名证书指纹）；同时上传 workflow artifact | Release 页可见 `dsh-desktop-0.2.1.apk` 可下载 |
-| FR-001-7 | 可追溯性：上游 ref、引擎归档 sha256、载荷 sha256、APK sha256 全部在 run summary 输出 | summary 含四类指纹 |
-| FR-001-8 | release 签名（追加）：tag 触发构建 `:app:assembleFullRelease` 并经固定 release 密钥签名；密钥经 secrets（KEYSTORE_BASE64/KEYSTORE_PASSWORD/KEY_ALIAS/KEY_PASSWORD）物化，四件套缺一即失败（**不回落 debug**）；`workflow_dispatch` 彩排仍出 debug 包 | Run #7 的 release APK 经 apksigner 验证证书 SHA-256 固定；tag 且缺 secret 时构建失败 |
-| FR-001-9 | 签名材料零入库：`dsh-desktop-android.keystore`、`keystore.properties` gitignore（仅入库 `keystore.properties.sample`）；本地备份归责任人保管 | `git ls-files` 不含密钥/口令文件；sample 入库 |
+| FR-012-1 | 触发：`push` tag `v*`；另支持 `workflow_dispatch` 手动彩排（无 tag 时回落工程默认版本） | 首跑由 tag `v0.2.1` 触发成功 |
+| FR-012-2 | 引擎投放（云端）：下载归档（`runtime.lock.json` 锁定 URL + `archiveSha256` 校验）→ 八项 ELF 门禁 → 投放 jniLibs | Actions 日志含门禁 8×✔ 与 `provision-engine` 投放完成 |
+| FR-012-3 | 载荷装配（云端）：上游三仓 ref 显式锁定（见 §4）；pnpm@11.28.5（对齐 harness `packageManager`）；产物 `app/src/main/assets/dsh-payload/{dsh.tar,dsh.version}` | Actions 日志含 `assemble-payload` 断言全过 + `package-payload` sha256 |
+| FR-012-4 | 版本注入：`v0.2.1` → `versionName=0.2.1`、`versionCode=MAJOR*10000+MINOR*100+PATCH`（=201，满足 FR-108-2 单调递增）；`package-payload` 的 `version=` 行 app 段同步注入（缺省回落现值，不改硬编码行为） | `aapt dump badging` 显示 versionName=0.2.1 / versionCode=201 |
+| FR-012-5 | APK 构建：JDK 17 + Android SDK（显式补装 `build-tools;36.0.0`、`platforms;android-36`）+ `:app:assembleFullDebug` | 构建成功且产出 `app-full-debug.apk` |
+| FR-012-6 | 发布：创建 GitHub Release（tag 同名）+ 附件 APK（**发布名 `dsh-desktop-<version>.apk`**，不带变体后缀；2026-10-30 定名）+ 摘要（`dsh.version` 内容、APK sha256、签名证书指纹）；同时上传 workflow artifact | Release 页可见 `dsh-desktop-0.2.1.apk` 可下载 |
+| FR-012-7 | 可追溯性：上游 ref、引擎归档 sha256、载荷 sha256、APK sha256 全部在 run summary 输出 | summary 含四类指纹 |
+| FR-012-8 | release 签名（追加）：tag 触发构建 `:app:assembleFullRelease` 并经固定 release 密钥签名；密钥经 secrets（KEYSTORE_BASE64/KEYSTORE_PASSWORD/KEY_ALIAS/KEY_PASSWORD）物化，四件套缺一即失败（**不回落 debug**）；`workflow_dispatch` 彩排仍出 debug 包 | Run #7 的 release APK 经 apksigner 验证证书 SHA-256 固定；tag 且缺 secret 时构建失败 |
+| FR-012-9 | 签名材料零入库：`dsh-desktop-android.keystore`、`keystore.properties` gitignore（仅入库 `keystore.properties.sample`）；本地备份归责任人保管 | `git ls-files` 不含密钥/口令文件；sample 入库 |
 
 ## 3. 非目标（本期不做）
 
-- ~~release 变体与正式签名~~ **已于 2026-10-30 追加实施（FR-001-8/9，实现 108/FR-108-2 签名分离部分）**；Play 上架签名（Play App Signing）仍属 108 P4。
+- ~~release 变体与正式签名~~ **已于 2026-10-30 追加实施（FR-012-8/9，实现 108/FR-108-2 签名分离部分）**；Play 上架签名（Play App Signing）仍属 108 P4。
 - store flavor 构建与 Play 发布（本流水线只构建 full flavor；store flavor 签名配置同样可用但不构建）。
-- 父工程（deepseek-harness-workspace）specs 不动——本模块文档只落 `dsh-desktop-android/specs/`。
+- 父工程整体构建规范由父工程 `specs/012-building-workflow/` 维护；本模块只写 Android 侧实现细节。
 - 不改上游三仓（harness/market/runtime 均为只读 checkout）。
 - 不做 PR CI（main 推送不触发构建，仅 tag 触发 + 手动彩排）。
 
@@ -47,7 +47,7 @@
 
  ## 5. 约束
 
-- 密钥/凭证不入库（FR-108-2/FR-001-9）；CI 仅用 `GITHUB_TOKEN` + 四个签名 secrets；keystore 本地备份（工程根 `dsh-desktop-android.keystore`，gitignore）由责任人保管，丢失即无法发布同签名升级。
+- 密钥/凭证不入库（FR-108-2/FR-012-9）；CI 仅用 `GITHUB_TOKEN` + 四个签名 secrets；keystore 本地备份（工程根 `dsh-desktop-android.keystore`，gitignore）由责任人保管，丢失即无法发布同签名升级。
 - 二进制不入库（§13）：jniLibs、dsh-payload 仍由管线在构建期现做。
 - 分支不改动：全部工作提交在 `main`。
  - 体积核对：载荷随包后实测 debug 全量包 ≈145 MB（dsh.tar 经 APK zip 压缩，15656 文件），仍在 FR-108-5 ≤200MB 预算内；release 签名体系属 108 模块 P4。

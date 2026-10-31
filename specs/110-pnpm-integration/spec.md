@@ -5,10 +5,10 @@
 
 ## 功能需求
 
-- FR-012-1 worker_threads 内 import(pnpm.cjs)；不 spawn（A10）
-- FR-012-2 布局：nodeLinker hoisted + packageImportMethod copy + ignoreScripts
-- FR-012-3 单飞：并发同步抛 another desktop pnpm operation…
-- FR-012-4 完成判据=worker exitCode；cancel=terminate；失败 127+DSH_PNPM_ENGINE
+- FR-110-1 worker_threads 内 import(pnpm.cjs)；不 spawn（A10）
+- FR-110-2 布局：nodeLinker hoisted + packageImportMethod copy + ignoreScripts
+- FR-110-3 单飞：并发同步抛 another desktop pnpm operation…
+- FR-110-4 完成判据=worker exitCode；cancel=terminate；失败 127+DSH_PNPM_ENGINE
 
 ## 验收与测试
 

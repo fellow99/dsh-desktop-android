@@ -5,7 +5,7 @@ plugins {
     alias(libs.plugins.kotlin.android)
 }
 
-// 001-building-workflow：release 签名材料零入库（keystore.properties / *.keystore 已 gitignore）。
+// 012-building-workflow：release 签名材料零入库（keystore.properties / *.keystore 已 gitignore）。
 // 模板见 keystore.properties.sample；CI 经 KEYSTORE_BASE64 等 secrets 物化。
 // 无 keystore.properties 时 release 构建回退未签名（仅本地无签名彩排），CI tag 触发强制要求签名。
 val keystoreProps = Properties().apply {
@@ -23,7 +23,7 @@ android {
         applicationId = "org.fellow99.dsh.android"
         minSdk = 29
         targetSdk = 36
-        // 001-building-workflow：发行版本由 CI 从 tag 注入（-PappVersionName/-PappVersionCode）；
+        // 012-building-workflow：发行版本由 CI 从 tag 注入（-PappVersionName/-PappVersionCode）；
         // 缺省回落脚手架值（本地开发形态不变）。versionCode = MAJOR*10000+MINOR*100+PATCH。
         versionCode = (project.findProperty("appVersionCode") as String?)?.toIntOrNull() ?: 1
         versionName = (project.findProperty("appVersionName") as String?) ?: "0.1.0"

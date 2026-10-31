@@ -29,7 +29,7 @@ import {
 } from './lib/payload-shims.mjs';
 
 const ROOT = resolve(fileURLToPath(new URL('..', import.meta.url)));
- // 001-building-workflow：上游根可经环境变量覆盖（CI 把三仓 checkout 进工作区子目录时注入）；
+ // 012-building-workflow：上游根可经环境变量覆盖（CI 把三仓 checkout 进工作区子目录时注入）；
  // 缺省保持本地开发布局（../deepseek-harness、../dsh-market）。
  const DSH_ROOT = resolve(process.env.DSH_HARNESS_DIR ?? resolve(ROOT, '../deepseek-harness'));
 const STAGE = resolve(ROOT, 'build/payload-stage/root');
@@ -99,7 +99,7 @@ function materializeLinks(dir, depth = 0, touched = []) {
 }
 
 /**
- * 001-building-workflow（CI run#2 教训）：单趟物化会把「整棵 @scope 符号链接」经 cpSync
+ * 012-building-workflow（CI run#2 教训）：单趟物化会把「整棵 @scope 符号链接」经 cpSync
  * 批量拷成真实目录，但拷入子树里若仍有链接（dereference 语义差异），需要再走一趟才能清干净。
  * 迭代至某趟 0 命中（上限 3 趟）；assertNoLinks 兜底。
  */
