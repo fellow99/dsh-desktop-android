@@ -207,14 +207,15 @@ export class AndroidTerminalHandle {
       const exited = await waitFor()
       if (!exited && !this.exited) this.kill('SIGKILL')
     }
-    // Wait at most graceMs more for the exit event, then settle outcome if needed.
+    // Wait at most graceMs more for the exit event, then settle the outcome if
+    // the exit event never arrived (killed shell that could not signal).
     await Promise.race([this.done.then(() => undefined), this.sleep(this.graceMs)])
     this.dataDisposable.dispose()
     this.exitDisposable.dispose()
     if (!this.exited) {
       this.exited = true
       this.output.end()
-      if (!this.outcome.settled) this.outcome.resolve({ exitCode: null, signal: null })
+      this.outcome.resolve({ exitCode: null, signal: null })
     }
   }
 }
