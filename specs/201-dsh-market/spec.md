@@ -7,6 +7,15 @@
 > 根因：`../dsh-market` 的构建产物 `lib/routes.js` 落后于 `src/routes.ts`（缺 `/dsh-market/sidebar-entry` 路由）。
 > 修复：① 重建 dsh-market（`npm run build`）；② `scripts/assemble-payload.mjs` 的 `collectDshMarket()` 增
 > `assertMarketBuilt()`（`src/*.ts` 新于 `lib/*.js` 即装配失败）——与 ark 同款，防再发残包。真机验证通过。
+>
+> **as-built 修复记录（2026-11-01，安装链）**：插件市场点「确认安装」失败，报错栈落在 `dsh-market-pnpm/dist/pnpm.cjs`、
+> `createNewStoreController`。完整错误（host stderr）：`Error: ENOENT: no such file or directory, lstat '/tmp'`，
+> 来自 pnpm 的 `temp-dir` 在**模块加载时** `realpathSync(os.tmpdir())`——**Android 无 `/tmp`**。
+> 修复（`packages/market-android/lib/pnpm-worker.mjs`）：在 import pnpm 之前把 `TMPDIR/TMP/TEMP` 与 `os.tmpdir()`
+> 指向 profile 下真实可写目录（`<profile>/.pnpm-cache/tmp`），并强制 `package-import-method=copy`（避开 reflink/hardlink）；
+> 装配期额外物化 `@reflink/reflink-android-arm64` 存根（防御下一层 reflink require）。真机验证：安装 `dsh-unlag` 成功、
+> 落盘 `profiles/android/node_modules/dsh-unlag`、卡片「✓ 已安装」。诊断增强：`pnpm-inprocess.js` 失败时把完整 worker
+> stderr 写入 host 日志（市场 UI 只保留栈尾、丢消息首行）。
 
 ## 功能需求
 

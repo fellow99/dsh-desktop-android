@@ -23,6 +23,7 @@ import { StringDecoder } from 'node:string_decoder'
 import fs from 'node:fs'
 import fsp from 'node:fs/promises'
 import path from 'node:path'
+import os from 'node:os'
 import { parentPort, workerData } from 'node:worker_threads'
 
 /** Post one captured chunk, tolerating a closed port during teardown. */
@@ -68,6 +69,11 @@ if (typeof WebAssembly === 'undefined') {
 
 // 2) Non-interactive environment, and every cache inside the profile sandbox.
 process.env.CI = 'true'
+// Import method: real copy. Android has no @reflink native (stubbed at assemble to ENOTSUP) and
+// hardlinks are unreliable on some Android storage; a plain copy always works and never invokes
+// the reflink binding. pnpm reads both npm_config_* / pnpm_config_* env keys.
+process.env.npm_config_package_import_method = 'copy'
+process.env.pnpm_config_package_import_method = 'copy'
 if (cacheDir !== '') {
   try {
     fs.mkdirSync(cacheDir, { recursive: true })
@@ -76,6 +82,27 @@ if (cacheDir !== '') {
     process.env.XDG_STATE_HOME = cacheDir
   } catch (error) {
     post('stderr', `\n[market-pnpm] cache dir unavailable (${cacheDir}): ${error && error.message ? error.message : String(error)}\n`)
+  }
+}
+
+// 2b) Temporary directory. Android has no `/tmp`, and this Node's `os.tmpdir()` falls back to it;
+// pnpm's `temp-dir` package does `realpathSync(os.tmpdir())` **at module load**, so the whole store
+// setup throws `ENOENT ... lstat '/tmp'` and every plugin install fails. Point TMPDIR/TMP/TEMP and
+// `os.tmpdir()` at a real, writable directory under the profile before importing pnpm.
+const tmpDir = cacheDir !== '' ? path.join(cacheDir, 'tmp') : ''
+if (tmpDir !== '') {
+  try {
+    fs.mkdirSync(tmpDir, { recursive: true })
+  } catch (error) {
+    post('stderr', `\n[market-pnpm] tmp dir unavailable (${tmpDir}): ${error && error.message ? error.message : String(error)}\n`)
+  }
+  process.env.TMPDIR = tmpDir
+  process.env.TMP = tmpDir
+  process.env.TEMP = tmpDir
+  try {
+    os.tmpdir = () => tmpDir
+  } catch {
+    // If the binding is not writable, the env vars still cover `os.tmpdir()` readers.
   }
 }
 

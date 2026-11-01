@@ -147,6 +147,8 @@ export function runPnpmInProcess(args, options = {}) {
   let cancelled = false
   let resolveDone
   let onAbort
+  /** Accumulated worker stderr, for host-side diagnostics on failure (market UI truncates the stack). */
+  let capturedStderr = ''
   const done = new Promise((resolve) => {
     resolveDone = resolve
   })
@@ -157,6 +159,11 @@ export function runPnpmInProcess(args, options = {}) {
     if (activeOperation === token) activeOperation = null
     if (options.signal !== undefined && onAbort !== undefined) options.signal.removeEventListener('abort', onAbort)
     lastRun = { args: args.map((value) => String(value)), dir: dir ?? null, exitCode: result.exitCode, at: Date.now() }
+    if (capturedStderr !== '') {
+      // Surface the full error to the host log (node_bridge.log): the market UI only keeps the
+      // last few stack frames and drops the message line, leaving device failures undiagnosable.
+      console.error(`[market-pnpm] pnpm failed (exit ${String(result.exitCode)}):\n${capturedStderr.slice(-8000)}`)
+    }
     stdout.end()
     stderr.end()
     resolveDone(result)
@@ -207,10 +214,13 @@ export function runPnpmInProcess(args, options = {}) {
   worker.on('message', (message) => {
     if (message === null || typeof message !== 'object') return
     if (message.type === 'stdout') stdout.write(String(message.text))
-    else if (message.type === 'stderr') stderr.write(String(message.text))
+    else if (message.type === 'stderr') { capturedStderr += String(message.text); if (capturedStderr.length > 24000) capturedStderr = capturedStderr.slice(-24000); stderr.write(String(message.text)) }
   })
   worker.on('error', (error) => {
-    stderr.write(`[market-pnpm] worker error: ${error && error.stack ? error.stack : String(error)}\n`)
+    const text = `[market-pnpm] worker error: ${error && error.stack ? error.stack : String(error)}\n`
+    capturedStderr += text
+    stderr.write(text)
+    console.error(text)
   })
   worker.on('exit', (code) => {
     if (cancelled) {
