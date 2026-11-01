@@ -606,6 +606,29 @@ function ensureNodePtyJsVersion(runTree) {
 }
 
 /** 201：物化 dshmarket（lib+client+运行时依赖闭包；@deepseek-ai/* 由宿主闭包提供）。 */
+/**
+ * 201（修复 sidebar entry 405）：市场工程是否「源码比产物新」。
+ *
+ * `lib/` 是构建产物；一旦落后于 `src/`，打出去的包就少了新的宿主路由/客户端能力，
+ * 而表现只是某个 UI 动作 404/405（例：`/dsh-market/sidebar-entry` 在旧 lib 里根本不存在 →
+ * 设置页点「显示」报 `sidebar entry: HTTP 405`）。这种漂移必须在装配期变红。
+ */
+function assertMarketBuilt(marketRoot) {
+  const pairs = [
+    ['src/index.ts', 'lib/index.js'],
+    ['src/routes.ts', 'lib/routes.js'],
+    ['src/client/index.ts', 'client/client.js'],
+  ];
+  for (const [source, built] of pairs) {
+    const srcPath = resolve(marketRoot, source);
+    const builtPath = resolve(marketRoot, built);
+    if (!existsSync(srcPath) || !existsSync(builtPath)) continue;
+    if (statSync(srcPath).mtimeMs > statSync(builtPath).mtimeMs + 1000) {
+      fail(2, `dsh-market 构建产物落后于源码：${built} 比 ${source} 旧（先 cd ../dsh-market && npm run build）`);
+    }
+  }
+}
+
 function collectDshMarket(runTree) {  const dest = resolve(runTree, 'node_modules/dshmarket');
   if (!existsSync(resolve(MARKET_ROOT, 'package.json'))) {
     fail(2, `dsh-market 未找到：${MARKET_ROOT}`, 'cd ../dsh-market && npm i && npm run build');
@@ -616,6 +639,7 @@ function collectDshMarket(runTree) {  const dest = resolve(runTree, 'node_module
     }
   }
   const marketVersion = String(JSON.parse(readFileSync(resolve(MARKET_ROOT, 'package.json'), 'utf8')).version ?? '');
+  assertMarketBuilt(MARKET_ROOT);
   rmSync(dest, { recursive: true, force: true });
   cpSync(MARKET_ROOT, dest, {
     recursive: true,
