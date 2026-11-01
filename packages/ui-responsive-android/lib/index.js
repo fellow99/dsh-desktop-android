@@ -67,6 +67,27 @@ export const RESPONSIVE_CSS = `/* ${RESPONSIVE_MARKER}: 窄屏下设置对话框
     min-height: 0;
     width: 100%;
   }
+
+  /* 6) 左侧边栏：窄屏展开时改为**浮动覆盖**（参考右侧栏），不挤占主内容。
+        布局是 CSS Grid（内联 grid-template-columns = <sidebar>px 1fr <right>px）：展开时第一列压为 0、
+        主内容跨满全宽，左栏面板绝对定位浮于内容之上。
+        判定用**仅展开态存在**的 aria-label="收起侧边栏"（纯 :has(属性)，避开该 WebView 不支持的
+        :not(:has(...)) 嵌套写法）；收起态无此按钮 → 规则不匹配 → 保持原内联轨道。 */
+  [class*="_frame"]:has([aria-label="收起侧边栏"]) {
+    grid-template-columns: 0px 1fr 0px !important;
+  }
+  [class*="_frame"]:has([aria-label="收起侧边栏"]) > [class*="_sidebarCol"] {
+    position: absolute !important;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    z-index: 40;
+    height: 100%;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.45);
+  }
+  [class*="_frame"]:has([aria-label="收起侧边栏"]) > [class*="_centerCol"] {
+    grid-column: 1 / -1 !important;
+  }
 }
 `
 
