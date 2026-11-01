@@ -18,6 +18,8 @@ class DshApplication : Application() {
         AppLog.line("info", "app", "onCreate pid=${android.os.Process.myPid()} v${versionNameSafe()}")
         registerActivityLifecycleCallbacks(object : ActivityLifecycleCallbacks {
             override fun onActivityResumed(activity: Activity) {
+                // 运行期权限请求需要前台 Activity（API<30 的存储权限系统弹窗）
+                HostCapabilities.setForegroundActivity(activity)
                 // 两段式槽位解析：用户从系统设置页（All-files 授权）返回时触发（§6.4）
                 HostCapabilities.onAppResumed(this@DshApplication)
             }

@@ -1,11 +1,14 @@
 package org.fellow99.dsh.android.host
 
+import android.Manifest
+import android.app.Activity
 import android.app.Application
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Intent
+import android.content.pm.PackageManager
 import org.fellow99.dsh.android.R
 import android.os.Build
 import android.os.Environment
@@ -15,6 +18,7 @@ import org.fellow99.dsh.android.common.Constants
 import org.fellow99.nodebridge.NodeRuntime
 import org.json.JSONObject
 import java.io.File
+import java.lang.ref.WeakReference
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicLong
 
@@ -34,6 +38,12 @@ object HostCapabilities {
     /** 可见 Activity 计数（T-011 前台门事实源）。 */
     private val resumedActivities = java.util.concurrent.atomic.AtomicInteger(0)
 
+    /** 运行期权限请求需要的前台 Activity（API<30 的存储权限系统弹窗）。 */
+    private var foregroundActivity: WeakReference<Activity>? = null
+
+    /** 存储运行权限请求的固定 requestCode（单飞行）。 */
+    private const val REQ_STORAGE = 0x5101
+
     /** 两段式槽位（§6.4）：pending → done/expired；5 分钟过期；Activity 恢复时解析。 */
     private object PendingSlots {
         enum class State { PENDING, DONE, EXPIRED }
@@ -45,6 +55,9 @@ object HostCapabilities {
 
         private val map = ConcurrentHashMap<String, Slot>()
         private val seq = AtomicLong(0)
+
+        /** 正在等待存储运行权限结果的槽位（单飞行）。 */
+        @Volatile var pendingStorageSlotId: String? = null
 
         fun create(kind: String = "allFiles"): String =
             "slot-${seq.incrementAndGet()}-${System.currentTimeMillis()}".also {
@@ -94,19 +107,23 @@ object HostCapabilities {
             }
         }
 
-        fun launchAllFilesSettings(app: Application, id: String) {
+        fun launchAllFilesSettings(app: Application, id: String): Boolean {
             val intent = Intent(android.provider.Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION)
                 .setData(android.net.Uri.parse("package:${app.packageName}"))
                 .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            if (intent.resolveActivity(app.packageManager) == null) {
+                AppLog.line("warn", "perm", "no activity for All-files settings (sdk=${Build.VERSION.SDK_INT})")
+                return false
+            }
             app.startActivity(intent)
             AppLog.line("info", "perm", "launch All-files settings, slot=$id")
+            return true
         }
 
-        /** 应用回到前台时解析 pending 的 All-files 槽位（用户从设置页返回）。 */
+        /** 应用回到前台时解析 pending 的 allFiles 槽位（从中设置页/运行权限弹窗返回）。 */
         fun onAppResumed(app: Application) {
             map.values.filter { it.state == State.PENDING && it.kind == "allFiles" }.forEach { slot ->
-                val granted = Build.VERSION.SDK_INT >= 30 && Environment.isExternalStorageManager()
-                if (granted) completeAllFiles(map.entries.firstOrNull { it.value === slot }?.key ?: "", true)
+                if (HostCapabilities.storageGranted()) completeAllFiles(map.entries.firstOrNull { it.value === slot }?.key ?: "", true)
             }
         }
     }
@@ -130,6 +147,33 @@ object HostCapabilities {
 
     /** 应用是否有可见 Activity（T-011）。 */
     fun isForeground(): Boolean = resumedActivities.get() > 0
+
+    /** 记录前台 Activity，供运行期权限请求使用。 */
+    fun setForegroundActivity(activity: Activity) {
+        foregroundActivity = WeakReference(activity)
+    }
+
+    /**
+     * 现有共享存储授权判定：API 30+ 看 All-files；API 26–29 看 READ/WRITE_EXTERNAL_STORAGE 运行时权限。
+     * （full flavor 在 mainifest 声明了 ≤29 的 READ/WRITE，故本分支可请求系统弹窗）
+     */
+    internal fun storageGranted(): Boolean {
+        if (Build.VERSION.SDK_INT >= 30) return Environment.isExternalStorageManager()
+        val ctx = appRef ?: return false
+        val read = ctx.checkSelfPermission(Manifest.permission.READ_EXTERNAL_STORAGE) == PackageManager.PERMISSION_GRANTED
+        val write = ctx.checkSelfPermission(Manifest.permission.WRITE_EXTERNAL_STORAGE) == PackageManager.PERMISSION_GRANTED
+        return read && write
+    }
+
+    /** 运行期权限结果回传（MainActivity.onRequestPermissionsResult 转入）：完成存储槽位。 */
+    fun onRequestPermissionsResult(requestCode: Int, grantResults: IntArray) {
+        if (requestCode != REQ_STORAGE) return
+        val granted = grantResults.isNotEmpty() && grantResults.all { it == PackageManager.PERMISSION_GRANTED }
+        val id = PendingSlots.pendingStorageSlotId
+        PendingSlots.pendingStorageSlotId = null
+        if (id != null) PendingSlots.completeAllFiles(id, granted)
+        AppLog.line("info", "perm", "storage runtime result granted=$granted slot=$id")
+    }
 
     fun register(app: Application, runtime: NodeRuntime) {
         appRef = app
@@ -158,8 +202,7 @@ object HostCapabilities {
         // §6.4 perm.allFiles.status（正式能力；store flavor 恒 false）
         runtime.host.register("perm.allFiles.status") { _ ->
             guard("{}") { _ ->
-                val granted = BuildConfig.DSH_STORAGE_MODE == "full" &&
-                    Build.VERSION.SDK_INT >= 30 && Environment.isExternalStorageManager()
+                val granted = BuildConfig.DSH_STORAGE_MODE == "full" && storageGranted()
                 """{"ok":true,"granted":$granted,"sdkInt":${Build.VERSION.SDK_INT},"storageMode":"${BuildConfig.DSH_STORAGE_MODE}"}"""
             }
         }
@@ -190,13 +233,35 @@ object HostCapabilities {
                         n.contains("DOCUMENTS", true) || n.contains("DOWNLOAD", true) || n.contains("DESKTOP", true)
                 } || names == null
                 if (!wantsAllFiles) {
-                    """{"ok":false,"error":"not-implemented","hint":"仅支持 All-files 类权限请求"}"""
-                } else if (Build.VERSION.SDK_INT >= 30 && Environment.isExternalStorageManager()) {
+                    """{"ok":false,"error":"not-implemented","hint":"仅支持 All-files / 存储类权限请求"}"""
+                } else if (storageGranted()) {
                     """{"ok":true,"granted":true}"""
-                } else {
+                } else if (Build.VERSION.SDK_INT >= 30) {
+                    // API 30+：All-files 设置页（带 resolveActivity 守卫，无入口时结构化报错而非崩溃）
                     val id = PendingSlots.create()
-                    PendingSlots.launchAllFilesSettings(app, id)
-                    """{"ok":true,"pending":true,"id":"$id"}"""
+                    if (!PendingSlots.launchAllFilesSettings(app, id)) {
+                        PendingSlots.remove(id)
+                        err("all-files-settings-unavailable", "该设备无 All-files 设置页；请在系统设置中手动授予存储访问")
+                    } else {
+                        """{"ok":true,"pending":true,"id":"$id"}"""
+                    }
+                } else {
+                    // API 26–29：经典存储运行时权限（**系统弹窗**），结果经 MainActivity.onRequestPermissionsResult 回传
+                    val activity = foregroundActivity?.get()
+                    val id = PendingSlots.create()
+                    if (activity == null) {
+                        PendingSlots.remove(id)
+                        err("no-foreground-activity", "请保持应用在前台后重试")
+                    } else {
+                        PendingSlots.pendingStorageSlotId = id
+                        val perms = arrayOf(
+                            Manifest.permission.READ_EXTERNAL_STORAGE,
+                            Manifest.permission.WRITE_EXTERNAL_STORAGE,
+                        )
+                        activity.runOnUiThread { activity.requestPermissions(perms, REQ_STORAGE) }
+                        AppLog.line("info", "perm", "request storage runtime perms, slot=$id")
+                        """{"ok":true,"pending":true,"id":"$id"}"""
+                    }
                 }
             }
         }
@@ -220,7 +285,7 @@ object HostCapabilities {
         // §6.4 perm.check：{name} → {granted}（All-files 语义名 → isExternalStorageManager）
         runtime.host.register("perm.check") { args ->
             guard(args) { json ->
-                val granted = Build.VERSION.SDK_INT >= 30 && Environment.isExternalStorageManager()
+                val granted = storageGranted()
                 """{"ok":true,"granted":$granted,"name":${JSONObject.quote(json.optString("name", ""))}}"""
             }
         }

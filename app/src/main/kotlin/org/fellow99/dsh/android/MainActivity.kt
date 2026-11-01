@@ -3,6 +3,7 @@ package org.fellow99.dsh.android
 import android.app.Activity
 import android.content.res.Configuration
 import android.os.Bundle
+import org.fellow99.dsh.android.host.HostCapabilities
 import android.view.KeyEvent
 import org.fellow99.dsh.android.runtime.DshRuntime
 import org.fellow99.dsh.android.ui.WebShellView
@@ -66,6 +67,12 @@ class MainActivity : Activity() {
     override fun onConfigurationChanged(newConfig: Configuration) {
         super.onConfigurationChanged(newConfig)
         shell.handleConfigurationChanged(newConfig)
+    }
+
+    /** 运行期权限结果回传（API<30 的存储权限系统弹窗）：完成两段式槽位。 */
+    override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<String>, grantResults: IntArray) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        HostCapabilities.onRequestPermissionsResult(requestCode, grantResults)
     }
 
     @Deprecated("Deprecated in Java")

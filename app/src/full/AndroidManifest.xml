@@ -7,4 +7,13 @@
         android:name="android.permission.MANAGE_EXTERNAL_STORAGE"
         tools:ignore="ScopedStorage" />
 
+    <!-- API 26–29（Android 8–10）：无 MANAGE_EXTERNAL_STORAGE / All-files 设置页，
+         文档/下载访问靠经典运行时权限（系统弹窗）。API 30+ 用上面的 All-files。 -->
+    <uses-permission
+        android:name="android.permission.READ_EXTERNAL_STORAGE"
+        android:maxSdkVersion="29" />
+    <uses-permission
+        android:name="android.permission.WRITE_EXTERNAL_STORAGE"
+        android:maxSdkVersion="29" />
+
 </manifest>
