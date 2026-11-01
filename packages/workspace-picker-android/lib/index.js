@@ -195,7 +195,14 @@ export function findRoot(path, roots) {
  */
 export function fencePath(path, roots) {
   assertNoTraversal(path)
-  const root = findRoot(path, roots)
+  let root = findRoot(path, roots)
+  if (root === undefined) {
+    // 设备上 `/data/data/<pkg>` 是指向 `/data/user/0/<pkg>` 的符号链接：`list` 侧用 realpath
+    // 产出条目路径（canonical），若此处只做词法比较，会把同一目录误判成「根外」。
+    // 因此两侧都 canonical 后再比一次（与上方 list 内部的 canonical 纪律一致）。
+    const canonical = canonicalOr(path)
+    root = roots.find((candidate) => isWithin(canonical, canonicalOr(candidate.path)))
+  }
   if (root === undefined) {
     throw new DirectoryPickerError('directory-unreadable', path, `cannot use "${path}": outside the allowed roots (root fence)`)
   }
