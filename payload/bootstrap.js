@@ -205,6 +205,9 @@ async function main() {
   let fsSymlinkShim = { marker: 'DSH_ANDROID_SHIM fs.symlink', installed: false };
   try { fsLinkShim = require('./shims/fs-link.js').install(log); } catch (e) { log('fs-link shim install failed: ' + e.message); }
   try { fsSymlinkShim = require('./shims/fs-symlink.js').install(log); } catch (e) { log('fs-symlink shim install failed: ' + e.message); }
+  // S6：node-pty 原生件定位 → nativeLibraryDir/libpty_node.so（111-pty-integration）
+  let nodePtyShim = { marker: 'DSH_ANDROID_SHIM node-pty', installed: false };
+  try { nodePtyShim = require('./shims/s6-node-pty.js').install(log); } catch (e) { log('s6-node-pty shim install failed: ' + e.message); }
 
   const shims = [
     { marker: 'DSH_ANDROID_SHIM flock', installed: fs.existsSync(path.join(RUN_ROOT, 'node_modules', '@deepseek-ai', 'node-addon-system', 'lib', 'flock.js')) },
@@ -212,6 +215,7 @@ async function main() {
     { marker: 'DSH_ANDROID_SHIM require-builtin', installed: false },
     fsLinkShim,
     fsSymlinkShim,
+    nodePtyShim,
   ];
   try {
     const sharpPkg = JSON.parse(fs.readFileSync(path.join(RUN_ROOT, 'node_modules', 'sharp', 'package.json'), 'utf8'));

@@ -14,7 +14,7 @@
  */
 
 import assert from 'node:assert/strict'
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { registerHooks } from 'node:module'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -73,7 +73,15 @@ async function test(name, fn) {
 await test('service surface: resolveExecutable / terminalEnvironment / spawnTerminal', async () => {
   assert.equal(typeof runtime.spawn, 'function')
   assert.deepEqual(await runtime.terminalEnvironment(), { platform: 'posix', defaultShell: '/system/bin/sh' })
-  await assert.rejects(runtime.spawnTerminal({}), error => error.code === 'not-supported' && error.name === 'SubprocessUnsupportedError')
+  // 111-pty-integration：spawnTerminal 缺 argv 属输入错误；node-pty 不可用时结构化上报（C2）。
+  await assert.rejects(runtime.spawnTerminal({}), /requires spec\.argv with a program/)
+  // node-pty 不可用时结构化上报（C2）；仅在该平台能解析出真实 shell 时可达（win32 无 /system/bin/sh）。
+  if (existsSync('/system/bin/sh')) {
+    await assert.rejects(
+      runtime.spawnTerminal({ argv: ['/system/bin/sh', '-i'], cwd: workspace, terminalType: 'xterm-256color', cols: 80, rows: 24 }),
+      /node-pty native addon unavailable/,
+    )
+  }
 })
 
 await test('validateSubprocessSpec rejects bad grace, pre-aborted signal, empty argv, relative cwd', () => {

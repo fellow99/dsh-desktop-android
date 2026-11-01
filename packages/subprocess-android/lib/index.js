@@ -3,9 +3,12 @@
  *
  * Replaces `@deepseek-ai/dsh-subprocess-local` (service definition:
  * `packages/subprocess/subprocess/src/index.ts:117-162`). The seam is four
- * methods; this provider implements `resolveExecutable`, `terminalEnvironment`
- * and `spawn`, and reports `spawnTerminal` as unsupported because Android has
- * no PTY (`/dev/ptmx` is absent).
+ * methods; this provider implements `resolveExecutable`, `terminalEnvironment`,
+ * `spawn` and `spawnTerminal`. `spawnTerminal` is backed by the published
+ * node-pty native addon (`io.github.fellow99:node-pty`, `libpty_node.so`)
+ * loaded from `nativeLibraryDir` via the S6 payload shim; a load/fork failure
+ * is a structured error (constitution C2), never a fake pipe terminal.
+ * See specs/111-pty-integration and docs/111-PTY实现方案.md (D2/D3).
  *
  * Platform fences (this is the enforcement point, not a convention):
  * - only `/system/bin/*`, `/system/bin/toybox`, and executable files inside the
@@ -35,6 +38,7 @@ import { isAbsolute, relative, resolve } from 'node:path'
 import { Service } from '@deepseek-ai/cordis'
 import { TailCollector, readerOf } from './output.js'
 import { isRipgrepRequest, runRipgrepEmulation } from './rg-emulation.js'
+import { AndroidTerminalHandle } from './terminal.js'
 
 /** Largest delay Node schedules without clamping it to one millisecond. */
 export const MAX_TIMER_DELAY_MS = 2_147_483_647
@@ -59,6 +63,17 @@ export const ENV_ALLOWLIST = Object.freeze(['PATH', 'HOME', 'TMPDIR', 'LANG'])
 
 /** Workspace seam variable set by the ArkTS runtime (`DshRuntime.ets:118-123`). */
 export const WORKSPACE_ENV = 'DSH_ANDROID_WORKSPACE'
+
+/** Lazy node-pty loader: the native addon is only required when a terminal is
+ * spawned, after the S6 payload shim has pointed node-pty's native resolution
+ * at `nativeLibraryDir/libpty_node.so` (preloaded by Kotlin). */
+let _pty
+function requireNodePty() {
+  if (_pty === undefined) {
+    _pty = require('node-pty')
+  }
+  return _pty
+}
 
 /** Executable lookup completed without finding an allowed executable. */
 export class SubprocessExecutableNotFoundError extends Error {
@@ -311,8 +326,10 @@ function outputMode(mode, label, env) {
  * OHOS subprocess runtime (`ctx.subprocess`).
  */
 export class OhosSubprocessRuntime extends Service {
-  constructor(ctx) {
+  constructor(ctx, config) {
     super(ctx, 'subprocess')
+    /** Config surface (bundle row). */
+    this.config = config || {}
     /** Live handles retained for teardown. */
     this.live = new Set()
     ctx.effect(() => {
@@ -569,13 +586,62 @@ export class OhosSubprocessRuntime extends Service {
   }
 
   /**
-   * Terminal allocation is unavailable: Android has no PTY.
-   * @returns {Promise<never>}
+   * Allocate a PTY-backed terminal process.
+   *
+   * The node-pty native addon is resolved through the S6 payload shim to the
+   * `nativeLibraryDir/libpty_node.so` preloaded by Kotlin (`System.loadLibrary`).
+   * Load or fork failures are structured errors that surface to the caller —
+   * there is no silent fallback to a pipe-backed fake terminal (C2).
+   * @param {import('./types.js').SubprocessTerminalSpawnSpec} spec
+   * @returns {Promise<import('./types.js').SubprocessTerminalHandle>}
    */
-  async spawnTerminal() {
-    throw new SubprocessUnsupportedError(
-      'subprocess-android: spawnTerminal is not supported on Android (no /dev/ptmx); use spawn with a pipe-based shell',
-    )
+  async spawnTerminal(spec) {
+    if (!spec || !Array.isArray(spec.argv) || spec.argv.length === 0 || typeof spec.argv[0] !== 'string') {
+      throw new Error('subprocess-android: spawnTerminal requires spec.argv with a program')
+    }
+    spec.signal?.throwIfAborted()
+
+    // Config surface is intentionally small: only terminal grace is accepted.
+    const graceMs = Number.isFinite(this.config?.graceMs) && this.config.graceMs > 0
+      ? this.config.graceMs
+      : 3000
+
+    const env = buildChildEnv(spec.env)
+    env.TERM = spec.terminalType ?? 'xterm-256color'
+    env.PWD = spec.cwd
+    const cwd = assertCwdAllowed(spec.cwd)
+    const program = resolveProgram(spec.argv[0], env, spec.signal)
+
+    let pty
+    try {
+      pty = requireNodePty()
+    } catch (error) {
+      throw new Error(
+        `subprocess-android: node-pty native addon unavailable: ${error && error.message ? error.message : String(error)}`,
+        { cause: error },
+      )
+    }
+
+    let terminal
+    try {
+      terminal = pty.spawn(program, spec.argv.slice(1), {
+        name: spec.terminalType ?? 'xterm-256color',
+        cols: spec.cols,
+        rows: spec.rows,
+        cwd,
+        env,
+      })
+    } catch (error) {
+      throw new Error(
+        `subprocess-android: PTY spawn failed for ${program}: ${error && error.message ? error.message : String(error)}`,
+        { cause: error },
+      )
+    }
+
+    const handle = new AndroidTerminalHandle(terminal, { graceMs })
+    this.live.add(handle)
+    void handle.done.then(() => this.live.delete(handle)).catch(() => {})
+    return handle
   }
 }
 

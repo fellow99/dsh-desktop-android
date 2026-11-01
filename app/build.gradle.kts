@@ -92,6 +92,8 @@ android {
 dependencies {
     // JNI 桥：Kotlin API + libnode_bridge.so + libnode_host_client.so + 引导 JS（Maven Central）
     implementation("io.github.fellow99:node-bridge:0.2.0")
-    // 引擎 libnode.so + libc++_shared.so 由 scripts/provision-engine.mjs 投放到 src/main/jniLibs（不入库）；
-    // 来源 aosp-node-runtime v24.22.1（runtime.lock.json 锁 sha256，八项 ELF 门禁）。
+    // 引擎与 PTY（111-pty-integration）：改由上架 Maven Central runtime/pty AAR 提供，
+    // 替换 scripts/provision-engine.mjs 手工投放 v24.22.1 的链路；二者版本必须逐字一致（配对纪律）。
+    runtimeOnly("io.github.fellow99:node-runtime:26.13.0")
+    runtimeOnly("io.github.fellow99:node-pty:26.13.0")
 }

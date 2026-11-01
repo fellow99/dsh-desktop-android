@@ -96,41 +96,20 @@ jobs:
           pnpm config set store-dir "$HOME/.pnpm-store" --global
           pnpm --version
 
-      - name: ③ 引擎归档下载 + archiveSha256 对账（单一事实源：runtime.lock.json）
+      - name: ③ Maven Central 可达 + 配对校验（111-pty-integration：引擎/PTY 改由上架 AAR）
         env:
           EXPECTED_ENGINE_NODE: ${{ env.EXPECTED_ENGINE_NODE }}
         run: |
-          export LOCK="$GITHUB_WORKSPACE/node-runtime-checkout/runtime.lock.json"
-          ACTIVE_NODE=$(node -e "const l=require(process.env.LOCK);console.log(l.active.node)")
-          if [[ "$ACTIVE_NODE" != "$EXPECTED_ENGINE_NODE" ]]; then
-            echo "::error::引擎配对漂移：lock.active.node=$ACTIVE_NODE，期望 $EXPECTED_ENGINE_NODE（node-bridge 0.2.0 配对）；请更新 NODE_RUNTIME_REF 或 EXPECTED_ENGINE_NODE"
-            exit 1
-          fi
-          read -r REL_TAG ARCHIVE WANT_SHA <<< "$(node -e "const l=require(process.env.LOCK);const r=l.releases.find(r=>r.node===l.active.node&&r.abi===l.active.abi);console.log(r.release.tag, r.release.archive, r.release.archiveSha256)")"
-          # lock 的 release.url 是发布页地址，下载直链按 release.tag + release.archive 构造
-          ARCHIVE_URL="https://github.com/${NODE_RUNTIME_REPO}/releases/download/${REL_TAG}/${ARCHIVE}"
-          echo "归档：$ARCHIVE_URL"
-          mkdir -p build/engine
-          curl -fL --retry 3 --silent --show-error -o "build/engine/$ARCHIVE" "$ARCHIVE_URL"
-          echo "$WANT_SHA  $ARCHIVE" | (cd build/engine && sha256sum -c -)
-          tar -xzf "build/engine/$ARCHIVE" -C build/engine
-          LIBNODE=$(find build/engine -name 'libnode.so' -type f | head -n1)
-          if [[ -z "$LIBNODE" ]]; then echo "::error::归档内未找到 libnode.so"; exit 1; fi
-          echo "ENGINE_LIBNODE=$LIBNODE" >> "$GITHUB_ENV"
+          # 配对纪律：node-runtime:<node> 与 node-pty:<node> 必须逐字一致且已在 Central 上线。
+          for aar in node-bridge/0.2.0/node-bridge-0.2.0.aar node-runtime/${EXPECTED_ENGINE_NODE}/node-runtime-${EXPECTED_ENGINE_NODE}.aar node-pty/${EXPECTED_ENGINE_NODE}/node-pty-${EXPECTED_ENGINE_NODE}.aar; do
+            code=$(curl -s -o /dev/null -w "%{http_code}" "https://repo1.maven.org/maven2/io/github/fellow99/$aar")
+            echo "$code  $aar"
+            if [[ "$code" != "200" ]]; then echo "::error::Maven Central 缺失或不可达: $aar"; exit 1; fi
+          done
 
-      - name: ④ 八项 ELF 门禁 + 投放（tools/provision.mjs）
-        env:
-          EXPECTED_ENGINE_NODE: ${{ env.EXPECTED_ENGINE_NODE }}
+      - name: ⑤（已由 AAR 提供）— 不再手工投放 jniLibs
         run: |
-          node node-runtime-checkout/tools/provision.mjs \
-            --node "$EXPECTED_ENGINE_NODE" \
-            --out node-runtime/src/main/jniLibs \
-            --from "$ENGINE_LIBNODE"
-
-      - name: ⑤ 投放 jniLibs（provision-engine.mjs）
-        run: |
-          DSH_ANDROID_RUNTIME_DIR="$GITHUB_WORKSPACE/node-runtime-checkout" \
-            node scripts/provision-engine.mjs
+          echo "node-runtime:${EXPECTED_ENGINE_NODE} + node-pty:${EXPECTED_ENGINE_NODE} 由 app/build.gradle.kts 的 runtimeOnly AAR 解析（111-pty-integration）"
 
       - name: ⑥ Checkout deepseek-harness @ ${{ env.DSH_HARNESS_REF }}
         uses: actions/checkout@v4

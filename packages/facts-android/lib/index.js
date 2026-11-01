@@ -225,7 +225,27 @@ export function collectFacts(ctx, env = process.env, globalObject = globalThis) 
       sandbox: 'none',
       sandboxEnforcement: 'none',
       kernelIsolation: false,
-      pty: false,
+      pty: (() => {
+        // 111-pty-integration：基于加载事实（非假设）上报 PTY 可用性（宪法 C2/C3）。
+        const libDir = env.DSH_ANDROID_NATIVE_LIB_DIR
+        const filePresent = typeof libDir === 'string' && libDir !== ''
+          && existsSync(require('node:path').join(libDir, 'libpty_node.so'))
+        let loadable = false
+        let detail = ''
+        if (!filePresent) {
+          detail = typeof libDir !== 'string' || libDir === ''
+            ? 'no DSH_ANDROID_NATIVE_LIB_DIR'
+            : 'libpty_node.so not found in nativeLibraryDir'
+        } else {
+          try {
+            // S6 垫片已把 node-pty 原生解析指向 nativeLibraryDir；能 require 即成真加载。
+            loadable = !!require('node-pty')
+          } catch (error) {
+            detail = `node-pty require failed: ${messageOf(error)}`
+          }
+        }
+        return { filePresent, loadable, detail }
+      })(),
       attachments: {
         metadata: 'pure-js (png/jpeg/gif/webp headers)',
         pixelOperations: bridgeAvailable ? 'via host bridge image.normalize (still a placeholder handler)' : 'unavailable (host bridge not wired)',

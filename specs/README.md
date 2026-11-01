@@ -2,7 +2,7 @@
 
 **项目名称：** DSH Desktop（Android 版） · `dsh-desktop-android`
 **版本：** 0.1.0（`versionCode` 1）
-**上游基线：** `deepseek-harness` `dsh-v0.2.1-rc.2` ｜ 引擎 Node **v24.22.1**（`aosp-node-runtime`，jniLibs 投放）｜ 桥 `node-bridge` **0.2.0**（Maven Central：`io.github.fellow99:node-bridge`）
+**上游基线：** `deepseek-harness` `dsh-v0.2.1-rc.2` ｜ 引擎 Node **v26.13.0**（`node-runtime` AAR，Maven Central）｜ 桥 `node-bridge` **0.2.0**（Maven Central：`io.github.fellow99:node-bridge`）｜ 配套 `node-pty` **26.13.0**（111-pty-integration）
 
 **技术栈：** Kotlin（View 体系）· 系统 WebView · 进程内 `libnode.so`（`node::Start`，JNI 槽位表桥）· dsh Host（HTTP + WebSocket）
 **文档生成时间：** 2026-10-27 ｜ **最后更新：** 2026-11-01（按父工程编号规则整理：0XX 公共 / 1XX 基础 / 2XX 插件）｜ **对应需求：** `000-scaffold`
@@ -97,6 +97,7 @@
 | 108 | 合规与发布 | [108-compliance-release/](./108-compliance-release/) | 🟡 Partial | 双 flavor/签名规划已落 Gradle；发布材料待正式签名物料（T-008） |
 | 109 | Agent 保活 | [109-agent-keepalive/](./109-agent-keepalive/) | ✅ Delivered | KeepAliveService（dataSync FGS）+ power.keepAwake + 生命周期实证（2026-10-29） |
 | 110 | pnpm 集成 | [110-pnpm-integration/](./110-pnpm-integration/) | ✅ Delivered | 内置纯 JS pnpm 10.34.6 + worker 调用器 + desktopPnpm 契约（含 lookup）。原 `012-pnpm-integration` 改号，释放 012 给构建工作流 |
+| 111 | PTY 完整终端 | [111-pty-integration/](./111-pty-integration/) | 🟡 Partial | 上架 node-runtime/pty AAR（引擎→26.13.0）+ spawnTerminal(node-pty) + 终端面板解禁；设备端取证待 real-device/模拟器（2026-11-01） |
 
 > 本工程是 1XX 编号基准：`101 runtime-launch` / `102 payload` / `103 webview-shell` / `104 host-capability` / `105 upstream-adapter` / `106 workspace-picker` / `107 diagnostics` / `108 compliance` / `109 agent-keepalive` / `110 pnpm`。
 
@@ -130,6 +131,7 @@
 | 108 | 合规与发布 | compliance-release | 基础功能 |
 | 109 | Agent 保活 | agent-keepalive | 基础功能 |
 | 110 | pnpm 集成 | pnpm-integration | 基础功能 |
+| 111 | PTY 完整终端 | pty-integration | 基础功能 |
 | 201 | dsh-market | dsh-market | 插件 |
 | 204 | GIT 插件 | plugin-git | 插件 |
 | 205 | 品牌资产 / Web 品牌位 | plugin-branding | 插件 |

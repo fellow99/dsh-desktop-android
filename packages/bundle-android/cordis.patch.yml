@@ -52,11 +52,14 @@
     workspaceRoot: !!js process.env.DSH_ANDROID_WORKSPACE
 
 - id: terminal-controller
-  disabled: true
+  config:
+    # 111-pty-integration：解禁 PTY 终端面板。maxCols/maxRows 沿用上游默认；保留回收靠
+    # @dsh-android/subprocess 的 AndroidTerminalHandle.inspectActivity 保守 unknown 兜底。
+    maxCols: 400
+    maxRows: 120
 
-# 客户端面连带：ui-sidebar-terminal 等待 webTerminals（来自 terminal-controller）
+# 客户端面连带：ui-sidebar-terminal 等待 webTerminals（来自 terminal-controller）；111 同步解禁
 - id: ui-sidebar-terminal
-  disabled: true
 
 # ── 目录选择：禁用 auto（它会动态挂载客户端面），改为**静态钉住上游 -browse**
 #    （上游注释明确支持在 overlay 中直接挂 -browse；提供 list/createDirectory 原语，
