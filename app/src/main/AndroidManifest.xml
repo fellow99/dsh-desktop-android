@@ -21,10 +21,13 @@
         android:usesCleartextTraffic="false">
 
         <!-- singleTask：多实例会争 filesDir 与端口（docs/000 §4.2） -->
+        <!-- configChanges：横竖屏/分屏等配置变化不重建 Activity → WebView 保留、页面自适应重排，
+             避免重建导致的 SPA 重载（“HARNESS loading”）。UI 模式/字号等仍由 WebView 自身处理。 -->
         <activity
             android:name=".MainActivity"
             android:exported="true"
-            android:launchMode="singleTask">
+            android:launchMode="singleTask"
+            android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout|keyboard|keyboardHidden|navigation|density|fontScale|uiMode">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />

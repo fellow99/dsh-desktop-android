@@ -5,6 +5,7 @@ import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
+import android.content.res.Configuration
 import android.graphics.Color
 import android.net.Uri
 import android.os.Build
@@ -203,12 +204,29 @@ class WebShellView(context: Context) : FrameLayout(context) {
             )
             return
         }
+        // 纵深防御：同一实例已加载同一页面时不重载（保留 SPA 状态；如后台回前台）。
+        if (webView != null && lastUrl == url) {
+            loadingOverlay.visibility = GONE
+            return
+        }
         lastUrl = url
         originPort = runCatching { Uri.parse(url).port }.getOrDefault(-1)
         val wv = ensureWebView()
         CookieManager.getInstance().flush()
         wv.loadUrl(url)
         loadingOverlay.visibility = GONE
+    }
+
+    /**
+     * 配置变化（横竖屏/分屏/密度）：Activity 不重建，WebView 保留；
+     * 其 viewport 变化会触发页面自适应重排（dsh SPA 响应式）。仅记录取证，不重载。
+     */
+    fun handleConfigurationChanged(newConfig: Configuration) {
+        AppLog.line(
+            "info",
+            "shell",
+            "onConfigurationChanged orientation=${newConfig.orientation} (WebView 保留，自适应重排)"
+        )
     }
 
     fun canGoBack(): Boolean = webView?.canGoBack() == true

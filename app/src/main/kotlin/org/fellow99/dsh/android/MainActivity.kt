@@ -1,6 +1,7 @@
 package org.fellow99.dsh.android
 
 import android.app.Activity
+import android.content.res.Configuration
 import android.os.Bundle
 import android.view.KeyEvent
 import org.fellow99.dsh.android.runtime.DshRuntime
@@ -56,6 +57,15 @@ class MainActivity : Activity() {
         }
         shell.onDestroy()
         super.onDestroy()
+    }
+
+    /**
+     * 配置变化（横竖屏/分屏/密度等，见 Manifest configChanges）：Activity 不重建，
+     * WebView 保留，页面内容按新布局自适应重排——不再重载 SPA（无 “HARNESS loading”）。
+     */
+    override fun onConfigurationChanged(newConfig: Configuration) {
+        super.onConfigurationChanged(newConfig)
+        shell.handleConfigurationChanged(newConfig)
     }
 
     @Deprecated("Deprecated in Java")
