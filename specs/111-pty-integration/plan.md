@@ -1,6 +1,6 @@
 # 111 · PTY 完整终端能力（plan.md）
 
-> 状态：⬜ Planned
+> 状态：🟢 Done（2026-11-01 真机实证；见 logs/20261101-1/TEST_REPORT.md）
 
 ## 方案要点（对齐 docs/111-PTY实现方案.md 决策）
 

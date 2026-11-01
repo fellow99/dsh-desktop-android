@@ -1,6 +1,6 @@
 # 111 · PTY 完整终端能力（spec.md）
 
-> 状态：⬜ Planned ｜ 依据：docs/111-PTY实现方案.md ｜ 源码落点：见 plan.md
+> 状态：🟢 In Use（真机 MIX/API26 端到端实证 2026-11-01）｜ 依据：docs/111-PTY实现方案.md ｜ 源码落点：见 plan.md
 > 需求编号：**111-pty-integration** ｜ 需求名称：引入 node-pty，实现 pty 能力
 > 上游基线：`dsh-v0.2.1-rc.2` ｜ 目标引擎 libnode **v26.13.0**（从 24.22.1 升级）｜ 配套 `node-pty:26.13.0`
 > 设计基准：`docs/111-PTY实现方案.md`（决策 D1–D6）

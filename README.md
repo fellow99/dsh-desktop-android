@@ -59,4 +59,4 @@ adb install -r app/build/outputs/apk/full/debug/app-full-debug.apk
 
 ## 已实证能力速览（2026-10-29）
 
-对话与图片分析 ✅ ｜ bash 端到端 ✅ ｜ git clone/push（http(s)）✅ ｜ 通知（回合完成/审批）✅ ｜ Documents/Download 写入 ✅ ｜ `/_android/facts`（debug）✅ ｜ AgentKeepAlive 生命周期 ✅ ｜ grep/glob（进程内 rg 替身）✅（本仓库实现）｜ PTY ⛔（node-pty 原生依赖，暂缓）｜ 真机复测 ⏸（暂缓）
+对话与图片分析 ✅ ｜ bash 端到端 ✅ ｜ git clone/push（http(s)）✅ ｜ 通知（回合完成/审批）✅ ｜ Documents/Download 写入 ✅ ｜ `/_android/facts`（debug）✅ ｜ AgentKeepAlive 生命周期 ✅ ｜ grep/glob（进程内 rg 替身）✅（本仓库实现）｜ **PTY 终端 ✅（node-pty:26.13.0，右侧栏真机实证 2026-11-01）** ｜ 真机复测（MIX/Android 8.0，minSdk 26）✅ 本轮（2026-11-01）
