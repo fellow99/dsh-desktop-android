@@ -17,7 +17,7 @@ dsh-desktop-android/
 │   └── wrapper/                        # gradle-wrapper 8.12（jar + properties）
 ├── gradlew / gradlew.bat
 ├── app/
-│   ├── build.gradle.kts                # applicationId/minSdk29/targetSdk36/flavor full|store/buildTools 36.0.0
+│   ├── build.gradle.kts                # applicationId/minSdk26/targetSdk36/flavor full|store/buildTools 36.0.0
 │   ├── proguard-rules.pro              # keep org.fellow99.nodebridge.**
 │   └── src/
 │       ├── main/

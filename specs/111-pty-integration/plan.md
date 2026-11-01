@@ -16,7 +16,7 @@
   的 `disabled:true`。
 - **D5 载荷**：核验 node-pty JS（subprocess-local 依赖，pnpm deploy 应已物化）；必要时在
   `assemble-payload.mjs` 补 vendor；S6 垫片随 `bootstrap.js` 登记。
-- **D6 测试**：real device API26<minSdk29 不可装 ⇒ 用模拟器 AVD `Pixel_10`（API37，x86_64 + ARM 转译）；
+- **D6 测试**：minSdk 29→26 后真实设备 MIX(API26) 可装，优先真机取证（必要时模拟器 AVD `Pixel_10`，API37 x86_64 + ARM 转译）；引擎升级全量回归（D.3/D.4 门禁）＋ PTY 端到端。
   引擎升级全量回归（D.3/D.4 门禁）＋ PTY 端到端。
 
 ## 依赖

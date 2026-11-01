@@ -9,7 +9,7 @@
 
 ### 1.1 运行环境
 
-- Android minSdk 29 / targetSdk 36 / only arm64-v8a。
+- Android minSdk 26 / targetSdk 36 / only arm64-v8a。
 - Kotlin（View 体系）+ 系统 WebView。
 - 构建：Gradle 8.12 + AGP 8.10.1 + JDK 17。
 - 品牌资产生成：Python 3 + Pillow（构建机工具，不随 APK）。

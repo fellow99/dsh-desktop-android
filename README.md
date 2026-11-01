@@ -34,6 +34,8 @@ adb install -r app/build/outputs/apk/full/debug/app-full-debug.apk
 
 环境前置（D.3 核对单）：IANA 时区（GMT 偏移名会被拒绝）、Android 13+ 需 POST_NOTIFICATIONS、All-files 授权（文档/下载 tab）、arm64-v8a 引擎（x86_64 模拟器需 ARM 转译镜像）。详见 [docs/安卓环境能力清单-v0.2.1.md](docs/安卓环境能力清单-v0.2.1.md) §D.3。
 
+> 支持下限 **Android 8.0 / API 26**（111 起 minSdk 29→26）：All-files（文档/下载）仅 API 30+ 可用（26–29 诚实降级）；通知运行时权限仅在 33+ 请求（<33 默认授予）。引擎/PTY/桥 AAR minSdk 24。
+
 ## 仓库结构
 
 | 路径 | 内容 |

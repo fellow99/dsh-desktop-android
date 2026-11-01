@@ -15,7 +15,7 @@
 
 | # | 需求 | 验收 |
 |---|---|---|
-| FR-000-1 | Gradle 工程：单 `:app`，AGP/Kotlin 版本目录，wrapper，`full`/`store` flavor，minSdk 29/targetSdk 36/compileSdk 36，仅 arm64 | `gradle assembleFullDebug` 成功 |
+| FR-000-1 | Gradle 工程：单 `:app`，AGP/Kotlin 版本目录，wrapper，`full`/`store` flavor，minSdk 26/targetSdk 36/compileSdk 36，仅 arm64 | `gradle assembleFullDebug` 成功 |
 | FR-000-2 | 引擎投放脚本（sha256 对账 `runtime.lock.json`）→ `app/src/main/jniLibs` | `provision-engine.mjs` 全 ✓ |
 | FR-000-3 | 载荷打包脚本（确定性裸 ustar + `dsh.version`）→ assets | `package-payload.mjs` + `tar -tvf` 合法 |
 | FR-000-4 | Kotlin 外壳骨架：`DshApplication`/`MainActivity`/`WebShellView`/`DshRuntime`/`PayloadInstaller`/`Probe`/`HostCapabilities`/`AppLog`/`Constants` | 代码落地，构建通过 |

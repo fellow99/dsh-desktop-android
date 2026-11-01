@@ -1,6 +1,6 @@
 # 111 · PTY 完整终端能力（test-cases.md）
 
-> 状态：⬜ Planned ｜ 取证环境：真实设备 MIX(API26<minSdk29 不可装) ⇒ 模拟器 AVD `Pixel_10`（API37，x86_64+ARM 转译）
+> 状态：⬜ Planned ｜ 取证环境：真实设备 MIX(API26，minSdk 已降至 26 可装)＋模拟器 AVD `Pixel_10`(API37, x86_64+ARM 转译)
 > 证据纪律：宪法 C3（命令输出/截图/facts 字段为唯一判据）。
 
 ## A. 环境与依赖

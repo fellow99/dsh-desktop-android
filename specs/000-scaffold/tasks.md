@@ -5,7 +5,7 @@
 ## A. 脚手架
 
 - [x] A1 settings/build/gradle.properties/libs.versions.toml/wrapper（8.12）
-- [x] A2 app 模块：applicationId/minSdk29/targetSdk36/compileSdk36/arm64/flavor full|store/buildTools 36.0.0
+- [x] A2 app 模块：applicationId/minSdk26/targetSdk36/compileSdk36/arm64/flavor full|store/buildTools 36.0.0
 - [x] A3 Manifest（singleTask/权限/networkSecurityConfig）+ full flavor manifest（MANAGE_EXTERNAL_STORAGE）
 - [x] A4 资源（主题/颜色/字符串/占位图标）
 

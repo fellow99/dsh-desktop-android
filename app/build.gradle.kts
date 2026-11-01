@@ -21,7 +21,7 @@ android {
 
     defaultConfig {
         applicationId = "org.fellow99.dsh.android"
-        minSdk = 29
+        minSdk = 26
         targetSdk = 36
         // 012-building-workflow：发行版本由 CI 从 tag 注入（-PappVersionName/-PappVersionCode）；
         // 缺省回落脚手架值（本地开发形态不变）。versionCode = MAJOR*10000+MINOR*100+PATCH。

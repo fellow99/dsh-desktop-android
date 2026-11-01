@@ -15,7 +15,7 @@
 | AGP | 8.10.1 | `gradle/libs.versions.toml`（受 Gradle 8.12 上限约束；8.11+ 需 Gradle 8.13） |
 | Kotlin | 2.2.20（android 插件，jvmTarget 17） | 同上 |
 | JDK | 17 字节码目标（构建机 JDK 21 可用） | `compileOptions` |
-| Android SDK | compileSdk 36 / targetSdk 36 / minSdk 29 / buildTools 36.0.0 | 决议 D6；buildTools 钉 36.0.0 避免 AGP 自动下载 35.x 失败 |
+| Android SDK | compileSdk 36 / targetSdk 36 / minSdk 26 / buildTools 36.0.0 | 决议 D6；buildTools 钉 36.0.0 避免 AGP 自动下载 35.x 失败 |
 | ABI | 仅 `arm64-v8a` | A14；引擎只有 arm64 |
 | UI | Kotlin View 体系（**不用 Compose**） | 外壳只有 WebView + 覆盖层，避免 Compose 编译器依赖；**偏差登记**（规划 §6.3 提到 Compose 侧加载视图，等价实现为 View 覆盖层） |
 | WebView 版本门禁 | `PackageManager` 查 `com.google.android.webview` 版本 ≥ 110 | **偏差登记**：不用 `androidx.webkit`（零 AndroidX 依赖策略）；语义等价 |
