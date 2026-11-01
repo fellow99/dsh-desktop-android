@@ -52,6 +52,7 @@ adb install -r app/build/outputs/apk/full/debug/app-full-debug.apk
 ## 关键文档
 
 - [docs/000-工程规划.md](docs/000-工程规划.md) — 总体规划与实现状态
+- [docs/112-设置对话框响应式.md](docs/112-设置对话框响应式.md) — 窄屏 UI 响应式（设置栏目 tabs 上移；左侧边栏浮动展开）：`@dsh-android/ui-responsive` CSS 注入方案与验证
 - [docs/安卓环境能力清单-v0.2.1.md](docs/安卓环境能力清单-v0.2.1.md) — 与 ark/hos 三路同表的能力矩阵、待办（§D.2）、门禁记录（§D.4）、任务登记册（§D.5 T-001…）
 - [specs/README.md](specs/README.md) — 规格索引；[specs/constitution.md](specs/constitution.md) — C1–C14 宪法（诚实降级/零补丁/不伪造）
 
