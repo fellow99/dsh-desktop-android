@@ -34,3 +34,21 @@
 ## 结论
 
 无 Critical；1 项 Important 已修；其余为诚实登记的边界与风险（C2/C3 一致）。可进入 Testing。
+
+---
+
+## 追加评审（修复提交 f2c3cdb / eee0ba6 之后）
+
+**范围**：B1–B6 六个真机暴露缺陷的修复 + 装配期可复现性。
+
+### 结论
+- 无 Critical。修复均在真机上端到端复验（可复现管线：`assemble --deploy --apply → package → assembleFullDebug → install → 终端 echo` 通过）。
+- **Important（已处理）**：node-pty JS/原生版本错配必须在装配期固化——已加 `ensureNodePtyJsVersion`（NODE_PTY_JS_VERSION=1.1.0，npm pack）与 `patchNodePtyNativeLoad`（MARK 幂等 + 锚点硬失败），并重跑 `--deploy --apply` 验证（日志：`node-pty JS 1.2.0-beta.15 → 1.1.0`、`补丁 111：… process.dlopen`）。
+- **Minor（已修）**：`payload/shims/s6-node-pty.js` 移除 symlink 方案遗留的死代码（`ptyPackageRoot`/`REL_TARGET`）。
+- **记录/接受**：
+  - `useLegacyPackaging=true` 的取舍（换取 nativeLibraryDir 实体可执行件；16KB 对齐不受损，安装盘占用增大）已入注释与 TEST_REPORT。
+  - `signalForeground/inspectForeground` 不作为（诚实降级，Ctrl-C 走输入通道）。
+  - `read_image` 首调失败重试成功（未复现根因，登记待观察）。
+
+### 门禁
+无 Critical，Important 已闭环 → 通过，进入回归（已用可复现管线端到端回归）。

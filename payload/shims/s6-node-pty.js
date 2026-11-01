@@ -27,18 +27,8 @@ const path = require('node:path');
 
 const MARKER = 'DSH_ANDROID_SHIM node-pty';
 
-/** node-pty 包地址（载荷运行树内）：<payload>/dsh/node_modules/node-pty */
-function ptyPackageRoot() {
-  // 本文件位于 <payload>/shims/s6-node-pty.js
-  const shimsDir = __dirname;
-  const payloadRoot = path.dirname(shimsDir);
-  return path.join(payloadRoot, 'dsh', 'node_modules', 'node-pty');
-}
-
-const REL_TARGET = path.join('build', 'Release', 'pty.node');
-
 /**
- * 安装：在 node-pty 的 build/Release 下放置 pty.node → nativeLibraryDir/libpty_node.so 的 symlink。
+ * 安装：校验 nativeLibraryDir 下存在 `libpty_node.so`（软件实体可执行件）。
  * @param {(line: string) => void} [log]
  * @returns {{ marker: string, installed: boolean, libDir?: string, detail?: string }}
  */
@@ -65,4 +55,4 @@ function install(log) {
   return { marker: MARKER, installed: true, libDir, native, detail: 'ok' };
 }
 
-module.exports = { install, marker: MARKER, REL_TARGET };
+module.exports = { install, marker: MARKER };
