@@ -72,8 +72,11 @@ android {
 
     packaging {
         jniLibs {
-            // A15/G12：.so 不压缩入包（16 KB 对齐前提）
-            useLegacyPackaging = false
+            // A15/G12：默认（useLegacyPackaging=false）下 .so 不抽取、留在 APK（16KB 对齐直接映射）。
+            // 但这会使 nativeLibraryDir 为空（Android 8 实测），S6 垫片（node-pty 经 process.dlopen
+            // 定位可执行实体文件）拿不到实体 .so ⇒ 改为 true 让安装时抽取到 nativeLibraryDir。
+            // aosp 库已 16KB 对齐，抽取不破坏对齐；代价是安装盘占用增大（libnode~87MB 抽取）。
+            useLegacyPackaging = true
         }
         resources {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"

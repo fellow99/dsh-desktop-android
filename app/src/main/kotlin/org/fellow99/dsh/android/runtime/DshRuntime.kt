@@ -117,13 +117,10 @@ object DshRuntime {
         // 宿主能力先于 start 注册（桥约束：顺序不能反）
         HostCapabilities.register(app, runtime)
 
-        // 111-pty-integration：preload node-pty native（从 nativeLibraryDir 装载，Android10+ W^X 唯一可执行位）。
-        // 失败不阻断启动 —— 终端能力缺失时由 /_android/facts pty.loaded=false 结构化暴露（宪法 C2）。
+        // 111-pty-integration：不在此预载 libpty_node（实测：System.loadLibrary 预载会让 Node 再 dlopen
+        // 同一 inode 时 N-API 注册冲突 → node-pty 加载失败）。改由 Node 侧 S6 垫片经 symlink 自行 dlopen。
+        // 仅把 nativeLibraryDir 下发给 Node（S6 垫片定位 libpty_node.so）。失败仍可在 /_android/facts 如实暴露。
         val nativeLibDir = app.applicationInfo.nativeLibraryDir
-        runCatching {
-            System.loadLibrary("pty_node")
-            AppLog.line("info", "pty", "libpty_node loaded (nativeLibraryDir=$nativeLibDir)")
-        }.onFailure { AppLog.line("warn", "pty", "System.loadLibrary(pty_node) 失败：${it.message}") }
 
         val userRoot = Environment.getExternalStorageDirectory().absolutePath
         val workspaceDir = File(filesDir, Constants.DIR_WORKSPACE)

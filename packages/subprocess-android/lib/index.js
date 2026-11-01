@@ -35,6 +35,7 @@ import { spawn as nodeSpawn } from 'node:child_process'
 import { accessSync, constants as fsConstants, realpathSync, statSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { isAbsolute, relative, resolve } from 'node:path'
+import { createRequire } from 'node:module'
 import { Service } from '@deepseek-ai/cordis'
 import { TailCollector, readerOf } from './output.js'
 import { isRipgrepRequest, runRipgrepEmulation } from './rg-emulation.js'
@@ -66,11 +67,14 @@ export const WORKSPACE_ENV = 'DSH_ANDROID_WORKSPACE'
 
 /** Lazy node-pty loader: the native addon is only required when a terminal is
  * spawned, after the S6 payload shim has pointed node-pty's native resolution
- * at `nativeLibraryDir/libpty_node.so` (preloaded by Kotlin). */
+ * at `nativeLibraryDir/libpty_node.so` (preloaded by Kotlin).
+ * NOTE: this module is ESM (`type: module`), so `require` does not exist; use a
+ * CJS require bridge to load the CommonJS node-pty package. */
+const requireCjs = createRequire(import.meta.url)
 let _pty
 function requireNodePty() {
   if (_pty === undefined) {
-    _pty = require('node-pty')
+    _pty = requireCjs('node-pty')
   }
   return _pty
 }

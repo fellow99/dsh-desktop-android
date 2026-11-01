@@ -19,10 +19,11 @@
  */
 import { execSync } from 'node:child_process';
 import {
-  cpSync, existsSync, lstatSync, mkdirSync, readFileSync, readdirSync,
+  cpSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, readdirSync,
   realpathSync, renameSync, rmSync, statSync, writeFileSync,
 } from 'node:fs';
 import { join, relative, resolve, sep } from 'node:path';
+import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import {
   applyAttachmentDurabilityPatch, applyFlockShim, applySharpShim, installRequireBuiltinShim,
@@ -524,9 +525,88 @@ function patchFsPrimitives(runTree) {
   }
 }
 
+/**
+ * 111-pty-integration：node-pty 原生件加载补丁。
+ *
+ * node-pty 的 `loadNativeModule()` 只按 `build/Release|Debug|prebuilds/<p>-<a>` 找 `pty.node`，
+ * 且 Node 按**解析后的扩展名**选加载器：symlink `pty.node` → `.so` 会被 realpath 成 `.so` 而当成 JS 解析。
+ * 上架件是 `libpty_node.so`，位于 `nativeLibraryDir`（Android W^X 唯一可执行位）。因此改为在
+ * `loadNativeModule` 开头优先用 `process.dlopen`（不认扩展名）从 `DSH_ANDROID_NATIVE_LIB_DIR/libpty_node.so` 加载。
+ * 幂等（MARK）；上游 utils.js 结构变更时锚点会硬失败，避免静默失效。
+ */
+function patchNodePtyNativeLoad(runTree) {
+  const file = resolve(runTree, 'node_modules/node-pty/lib/utils.js');
+  if (!existsSync(file)) {
+    // node-pty 不在载荷里（例如未启用终端）——不阻断装配，登记跳过。
+    log('111：未找到 node-pty/lib/utils.js，跳过原生加载补丁');
+    return;
+  }
+  const MARK = 'DSH_ANDROID_NODE_PTY_LOAD';
+  const text = readFileSync(file, 'utf8');
+  if (text.includes(MARK)) return;
+  const anchor = 'function loadNativeModule(name) {';
+  if (text.split(anchor).length - 1 !== 1) fail(1, '111 node-pty loadNativeModule 锚点不唯一或缺失');
+  const inject = `${anchor}
+    /* ${MARK}: 优先从 nativeLibraryDir 经 process.dlopen 加载（扩展名无关，绕过 pty.node 路径约定）。 */
+    var _dshDir = process.env.DSH_ANDROID_NATIVE_LIB_DIR;
+    if (_dshDir) {
+        var _dshPath = require('path');
+        var _dshNative = _dshPath.join(_dshDir, 'lib' + name + '_node.so');
+        if (require('fs').existsSync(_dshNative)) {
+            var _dshModule = require('module');
+            var _dshM = new _dshModule(_dshNative, module);
+            _dshM.filename = _dshNative;
+            _dshM.paths = _dshModule._nodeModulePaths(_dshPath.dirname(_dshNative));
+            process.dlopen(_dshM, _dshNative);
+            return { dir: _dshDir, module: _dshM.exports };
+        }
+    }`;
+  writeFileSync(file, text.replace(anchor, inject));
+  if (!readFileSync(file, 'utf8').includes(MARK)) fail(1, '111 node-pty 补丁后标记缺失');
+  log('补丁 111：node-pty 原生件经 process.dlopen 从 nativeLibraryDir 加载');
+}
+
+/**
+ * 111-pty-integration：把载荷里的 node-pty JS 版本对齐到与上架 `libpty_node.so` 配对的版本。
+ *
+ * 上架 `io.github.fellow99:node-pty:26.13.0` 的原生件由 **node-pty 1.1.0** 构建（其 `pty.resize(fd,cols,rows)`
+ * 为 3 参）；而上游 harness 依赖的 node-pty 是 1.2.0-beta.15（5 参 resize 带 pixelSize）。
+ * 直接混用会在打开终端时报 `Usage: pty.resize(fd, cols, rows)`。因此装配期把 JS 对齐到 1.1.0。
+ * 网络获取（npm pack）；确定性由 NODE_PTY_JS_VERSION 固定。
+ */
+const NODE_PTY_JS_VERSION = '1.1.0';
+function ensureNodePtyJsVersion(runTree) {
+  const pkgFile = resolve(runTree, 'node_modules/node-pty/package.json');
+  if (!existsSync(pkgFile)) {
+    log('111：载荷无 node-pty，跳过 JS 版本对齐');
+    return;
+  }
+  const current = String(JSON.parse(readFileSync(pkgFile, 'utf8')).version ?? '');
+  if (current === NODE_PTY_JS_VERSION) {
+    log(`node-pty JS 已是 ${current}（与上架原生件配对）`);
+    return;
+  }
+  const tmp = mkdtempSync(join(tmpdir(), 'node-pty-js-'));
+  try {
+    const registry = process.env.DSH_ANDROID_REGISTRY || 'https://registry.npmmirror.com';
+    run(`npm pack node-pty@${NODE_PTY_JS_VERSION} --registry ${registry} --silent`, tmp);
+    const tgz = readdirSync(tmp).find((name) => name.endsWith('.tgz'));
+    if (!tgz) fail(1, `111 node-pty JS 对齐：npm pack 未产出 tgz（${NODE_PTY_JS_VERSION}）`);
+    run(`tar -xzf "${tgz}"`, tmp);
+    const src = resolve(tmp, 'package');
+    const dest = resolve(runTree, 'node_modules/node-pty');
+    rmSync(resolve(dest, 'lib'), { recursive: true, force: true });
+    cpSync(resolve(src, 'lib'), resolve(dest, 'lib'), { recursive: true });
+    cpSync(resolve(src, 'package.json'), resolve(dest, 'package.json'));
+    if (existsSync(resolve(src, 'typings'))) cpSync(resolve(src, 'typings'), resolve(dest, 'typings'), { recursive: true });
+    log(`111：node-pty JS ${current} → ${NODE_PTY_JS_VERSION}（与上架 libpty_node.so 配对）`);
+  } finally {
+    rmSync(tmp, { recursive: true, force: true });
+  }
+}
+
 /** 201：物化 dshmarket（lib+client+运行时依赖闭包；@deepseek-ai/* 由宿主闭包提供）。 */
-function collectDshMarket(runTree) {
-  const dest = resolve(runTree, 'node_modules/dshmarket');
+function collectDshMarket(runTree) {  const dest = resolve(runTree, 'node_modules/dshmarket');
   if (!existsSync(resolve(MARKET_ROOT, 'package.json'))) {
     fail(2, `dsh-market 未找到：${MARKET_ROOT}`, 'cd ../dsh-market && npm i && npm run build');
   }
@@ -635,6 +715,8 @@ function overlay(runTree) {
   try { collectRipgrepStub(runTree); } catch (e) { fail(1, `206 rg 存根物化失败：${e.message}`); }
   try { patchPluginManagerLookup(runTree); } catch (e) { fail(1, `T-001 补丁失败：${e.message}`); }
   try { patchFsPrimitives(runTree); } catch (e) { fail(1, `T-004 补丁失败：${e.message}`); }
+  try { ensureNodePtyJsVersion(runTree); } catch (e) { fail(1, `111 node-pty JS 版本对齐失败：${e.message}`); }
+  try { patchNodePtyNativeLoad(runTree); } catch (e) { fail(1, `111 node-pty 原生加载补丁失败：${e.message}`); }
   try { collectDshMarket(runTree); } catch (e) { fail(1, `201 物化失败：${e.message}`); }
 
   // 3) 垫片（§5.3 白名单）

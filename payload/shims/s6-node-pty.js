@@ -57,23 +57,12 @@ function install(log) {
     return { marker: MARKER, installed: false, detail };
   }
 
-  const ptyRoot = ptyPackageRoot();
-  const linkPath = path.join(ptyRoot, REL_TARGET);
-  try {
-    fs.mkdirSync(path.dirname(linkPath), { recursive: true });
-    try {
-      fs.unlinkSync(linkPath);
-    } catch (error) {
-      if (error && error.code !== 'ENOENT') throw error;
-    }
-    fs.symlinkSync(native, linkPath);
-    if (typeof log === 'function') log(`${MARKER}: installed (${linkPath} -> ${native})`);
-    return { marker: MARKER, installed: true, libDir, detail: 'ok' };
-  } catch (error) {
-    const detail = error && error.message ? error.message : String(error);
-    if (typeof log === 'function') log(`${MARKER}: installed=false (${detail})`);
-    return { marker: MARKER, installed: false, detail };
-  }
+  // 加载由材质期补丁 patchNodePtyNativeLoad（node-pty/lib/utils.js）完成：
+  //   loadNativeModule() 经 process.dlopen 从 nativeLibraryDir/libpty_node.so 加载
+  //   （绕过 Node 的扩展名判定——symbolic-link → .so 会被当成 JS 解析）。
+  // 本垫片只做「可加载性事实校验 + 登记」；真验证在 require('node-pty') 时发生。
+  if (typeof log === 'function') log(`${MARKER}: installed (native=${native}; load via process.dlopen)`);
+  return { marker: MARKER, installed: true, libDir, native, detail: 'ok' };
 }
 
 module.exports = { install, marker: MARKER, REL_TARGET };
