@@ -109,6 +109,9 @@
     # 零补丁：Host 半边 webServer.tapIndex + index-inject；浏览器半边占 sidebar/hero 槽位。
     - id: branding-android
       name: '@dsh-android/branding'
+    # 响应式 UI（111 后续）：窄屏下把设置对话框左侧栏目改成顶部横向 tab 条（纯 CSS 注入，上游零补丁）。
+    - id: ui-responsive-android
+      name: '@dsh-android/ui-responsive'
 
 # ── 审批预设：需要"可隔离的执行器"（ctx.shell.sandboxMode 非空）。
 #    Android 没有内核隔离，执行器如实不声明 sandboxMode；上游 permission-presets
