@@ -36,10 +36,12 @@ export const HERO_ATTR = 'data-dsh-android-hero'
  * hero 品牌位的替换规则（结构说明同 ohos 版）：
  * `:has()` 先定位 `.headline`，再隐藏不含品牌位的直接 span（上游 titleGroup）；
  * 品牌位锚点（hero 独占属性）保证规则只命中 hero 那一行，永不选中品牌位自己。
- * 上游若改 hero 结构，规则不匹配（标语恢复原样），不会误伤别的元素。
+ * 同时接受两种容器结构：槽位直挂（div[data-slot]，display:contents —— rc.5 结构）
+ * 与 span 包裹（div > span > [data-slot]，旧结构），兼容上游两种渲染形态。
+ * 若两者都不匹配（标签即恢复上游原样），不会误伤别的元素。
  */
 export const HERO_CSS = `/* ${BRAND_MARKER}: 上游 hero 标语/Preview 徽标由本产品品牌位接管 */
-div:has(> span > [data-slot="conversation.hero.brand.mark"] [${HERO_ATTR}]) > span:not(:has([${HERO_ATTR}])){display:none !important}
+div:has(> [data-slot="conversation.hero.brand.mark"][${HERO_ATTR}], > [data-slot="conversation.hero.brand.mark"] [${HERO_ATTR}], > span > [data-slot="conversation.hero.brand.mark"] [${HERO_ATTR}]) > span:not(:has([${HERO_ATTR}])){display:none !important}
 `
 
 /** 首个 `<title>…</title>`（容忍上游改写模板的缩进与内容）。 */
