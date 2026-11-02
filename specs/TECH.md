@@ -7,9 +7,9 @@
 
 | 项 | 值 | 来源 / 说明 |
 |---|---|---|
-| 上游 | `deepseek-harness` `dsh-v0.2.1-rc.2`（`engines.node = ^22.19.0 \|\| >=24.0.0`） | 子模块 tag 固定 |
-| 引擎 | Node **24.22.1**，`arm64-v8a`，`libnode.so` 71,070,040 B（sha256 `f6a1610a…`，16 KB 对齐） | `runtime.lock.json` active；八项 ELF 门禁 |
-| 引擎投放 | `app/src/main/jniLibs/arm64-v8a/`（`scripts/provision-engine.mjs`，sha256 对账后复制） | **偏差登记**：Maven Central 的 `io.github.fellow99:node-runtime` 尚无 24.22.1（仅 24.2.0/18.20.4）；待其发布后切回 Maven 依赖 |
+| 上游 | `deepseek-harness` `dsh-v0.2.1-rc.5`（`engines.node = ^22.19.0 \|\| >=24.0.0`） | 子模块 tag 固定 |
+| 引擎 | Node **26.13.0**，`arm64-v8a`，`libnode.so` 87,757,048 B（sha256 `bc5d15f…`，16 KB 对齐） | `runtime.lock.json` active；八项 ELF 门禁 |
+| 引擎投放 | `app/src/main/jniLibs/arm64-v8a/`（`scripts/provision-engine.mjs`，sha256 对账后复制） | node-runtime 26.13.0 已上架 Maven Central（`io.github.fellow99:node-runtime:26.13.0`），偏差登记关闭 |
 | 桥 | `io.github.fellow99:node-bridge:0.2.0`（Maven Central） | `libnode_bridge.so` + `libnode_host_client.so` + 内置引导 JS |
 | Gradle | 8.12（wrapper 锁定） | `gradle/wrapper/gradle-wrapper.properties` |
 | AGP | 8.10.1 | `gradle/libs.versions.toml`（受 Gradle 8.12 上限约束；8.11+ 需 Gradle 8.13） |

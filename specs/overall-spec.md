@@ -9,7 +9,7 @@
 |---|---|---|---|
 | FR-APP-1 | 单 APK、单 Activity（`singleTask`）、仅 `arm64-v8a`，applicationId `org.fellow99.dsh.android` | ✅ | `AndroidManifest.xml`、`app/build.gradle.kts` |
 | FR-APP-2 | 双发行线 flavor：`full`（All-files，自分发）/ `store`（SAF-only，可选） | ✅（结构）/ ⬜（store 政策项） | `flavorDimension "dist"` |
-| FR-APP-3 | 版本三元组可见：app 0.1.0 / dsh 0.2.1-rc.2 / node 24.22.1 | 🟡 | `dsh.version`；「关于」页未做 |
+| FR-APP-3 | 版本三元组可见：app 0.2.1 / dsh 0.2.1-rc.5 / node 26.13.0 | 🟡 | `dsh.version`；「关于」页未做 |
 
 ## FR-RUN 运行时与启动
 

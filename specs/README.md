@@ -2,7 +2,7 @@
 
 **项目名称：** DSH Desktop（Android 版） · `dsh-desktop-android`
 **版本：** 0.1.0（`versionCode` 1）
-**上游基线：** `deepseek-harness` `dsh-v0.2.1-rc.2` ｜ 引擎 Node **v26.13.0**（`node-runtime` AAR，Maven Central）｜ 桥 `node-bridge` **0.2.0**（Maven Central：`io.github.fellow99:node-bridge`）｜ 配套 `node-pty` **26.13.0**（111-pty-integration）
+**上游基线：** `deepseek-harness` `dsh-v0.2.1-rc.5` ｜ 引擎 Node **v26.13.0**（`node-runtime` AAR，Maven Central）｜ 桥 `node-bridge` **0.2.0**（Maven Central：`io.github.fellow99:node-bridge`）｜ 配套 `node-pty` **26.13.0**（111-pty-integration）
 
 **技术栈：** Kotlin（View 体系）· 系统 WebView · 进程内 `libnode.so`（`node::Start`，JNI 槽位表桥）· dsh Host（HTTP + WebSocket）
 **文档生成时间：** 2026-10-27 ｜ **最后更新：** 2026-11-01（按父工程编号规则整理：0XX 公共 / 1XX 基础 / 2XX 插件）｜ **对应需求：** `000-scaffold`

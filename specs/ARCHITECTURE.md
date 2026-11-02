@@ -26,7 +26,7 @@
 │  │   dsh Host：webserver(127.0.0.1:0) + /api + connection            │  │
 │  └──────────────────────────────────────────────────────────────────┘  │
 │  assets/dsh-payload/{dsh.tar, dsh.version}（裸 ustar，AAPT2 兼容）      │
-│  jniLibs/arm64-v8a/{libnode.so, libc++_shared.so}   ← 引擎（锁 24.22.1）│
+│  jniLibs/arm64-v8a/{libnode.so, libc++_shared.so}   ← 引擎（锁 26.13.0）│
 │  （AAR 内）libnode_bridge.so + libnode_host_client.so ← 桥 0.2.0        │
 └────────────────────────────────────────────────────────────────────────┘
 ```

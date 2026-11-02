@@ -9,8 +9,8 @@
 
 1. 建立 GitHub Actions 云端流水线：**push tag `v*`（首发 `v0.2.1`）触发**，全自动产出可侧载安装的 APK 并发布到 GitHub Release。
 2. 云端完整复现本地构建三件套（规划 §13「二进制不入库」的必然推论）：
-   - **引擎投放**（G12 链路）：下载 aosp-node-runtime v24.22.1 GitHub Release 归档 → `archiveSha256` 对账 → `tools/provision.mjs` 八项 ELF 门禁 → `provision-engine.mjs` 投放 `app/src/main/jniLibs`。
-   - **载荷装配**（P1/P2/P3 管线）：deepseek-harness @ `dsh-v0.2.1-rc.2`（pnpm 构建）+ dsh-market @ `v1.66.42`（npm 构建）→ `assemble-payload --deploy --apply` → `package-payload`。
+   - **引擎投放**（G12 链路）：下载 aosp-node-runtime v26.13.0 GitHub Release 归档 → `archiveSha256` 对账 → `tools/provision.mjs` 八项 ELF 门禁 → `provision-engine.mjs` 投放 `app/src/main/jniLibs`。
+   - **载荷装配**（P1/P2/P3 管线）：deepseek-harness @ `dsh-v0.2.1-rc.5`（pnpm 构建）+ dsh-market @ `v1.73.7`（npm 构建）→ `assemble-payload --deploy --apply` → `package-payload`。
    - **APK 构建**：`:app:assembleFullDebug`（彩排版，debug 签名可直接侧载）。
 3. 版本注入：从 tag 派生 `versionName` / `versionCode`，并同步到载荷 `dsh.version` 元信息。
 4. **release 正式签名（2026-10-30 追加）**：tag 发布产出**固定密钥签名的 full/release APK**（可覆盖升级、可上架），替代原 debug 彩排包；签名材料零入库，经 GitHub Secrets 注入（实现 108 模块 FR-108-2 的 debug/release 签名分离）。
@@ -41,9 +41,9 @@
 
 | 上游 | ref | 用途 |
 |---|---|---|
- | `fellow99/aosp-node-runtime` | commit `605715e7`（origin/main HEAD；其 `runtime.lock.json` 的 active=24.22.1。注意：tag `v24.22.1` 的 lock 仍是 active=24.2.0 且无 24.22.1 条目，不可用于 CI） | `tools/provision.mjs` 八项门禁 + `runtime.lock.json`（release.tag/archive/archiveSha256/so sha256） |
-| `deepseek-ai/deepseek-harness` | tag `dsh-v0.2.1-rc.2` | 载荷上游（pnpm build → deploy 物化） |
-| `dsh-market/dsh-market` | tag `v1.66.42` | 市场包（npm build → dshmarket 物化） |
+ | `fellow99/aosp-node-runtime` | commit `290c14d0`（origin/main HEAD；其 `runtime.lock.json` 的 active=26.13.0。钉 main commit 而非 tag，避免 release tag 的 lock 与 active 不一致） | `tools/provision.mjs` 八项门禁 + `runtime.lock.json`（release.tag/archive/archiveSha256/so sha256） |
+| `deepseek-ai/deepseek-harness` | tag `dsh-v0.2.1-rc.5` | 载荷上游（pnpm build → deploy 物化） |
+| `dsh-market/dsh-market` | tag `v1.73.7` | 市场包（npm build → dshmarket 物化） |
 
  ## 5. 约束
 

@@ -58,7 +58,7 @@ result 失败: {"ok":false, "error": "...", "hint"?: "..."}
 sha256=<dsh.tar 的 SHA-256>
 files=<条目数>
 bytes=<tar 字节数>
-version=app 0.1.0 / dsh 0.2.1-rc.2 / node 24.22.1
+version=app 0.2.1 / dsh 0.2.1-rc.5 / node 26.13.0
 inputsKey=<输入清单哈希（打包幂等键）>
 ```
 
