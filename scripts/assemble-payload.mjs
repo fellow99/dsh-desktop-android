@@ -289,7 +289,7 @@ function prunePayload(stage) {
 /** 待装配的输入是否成立；不成立时给出下一步命令。 */
 function assertDeployInputs() {
   if (!existsSync(resolve(DSH_ROOT, 'package.json'))) {
-    fail(2, `上游未找到：${DSH_ROOT}`, '确认 ../deepseek-harness 处于 dsh-v0.2.1-rc.2');
+    fail(2, `上游未找到：${DSH_ROOT}`, '确认 ../deepseek-harness 处于 dsh-v0.2.1-rc.5');
   }
   const cliBin = resolve(DSH_ROOT, 'apps/cli/lib/bin.js');
   const sampleLib = resolve(DSH_ROOT, 'packages/core/agent/lib/index.js');
