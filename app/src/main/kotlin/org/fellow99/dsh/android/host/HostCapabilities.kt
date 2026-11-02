@@ -471,13 +471,35 @@ object HostCapabilities {
     /** handler 包装：任何异常 → {"ok":false,"error":…}，绝不向桥抛出。 */
     private inline fun guard(argsJson: String, block: (JSONObject) -> String): String =
         try {
-            block(JSONObject(argsJson))
+            block(expandAnbArgs(argsJson))
         } catch (t: Throwable) {
             val err = JSONObject()
             err.put("ok", false)
             err.put("error", "${t.javaClass.simpleName}: ${t.message}")
             err.toString()
         }
+
+    /**
+     * 大数据入参文件通道（勘误：原生 addon 的入参静态缓冲 ANB_ARGS_CAP=8192 字节，
+     * node_bridge.c / node_host_client.c；Kotlin 侧所谓 capBytes 8MiB 只约束响应信封，
+     * 不约束这条入参通道）。>=7KB 的入参（典型：image.normalize 携带整图 base64，
+     * >6KB 图编码后必超界）由 Node 侧 host-bridge.js 落临时文件并传 {__anbFile: 绝对路径}，
+     * 此处读回展开并删除临时文件；所有 handler 经 guard 透明受益。
+     */
+    private fun expandAnbArgs(argsJson: String): JSONObject {
+        val probe = JSONObject(argsJson)
+        val filePath = probe.optString("__anbFile", "")
+        if (filePath.isEmpty()) return probe
+        val f = File(filePath)
+        if (!f.isFile) throw IllegalStateException("__anbFile 不存在: $filePath")
+        try {
+            val content = f.readText()
+            if (content.length > 16_000_000) throw IllegalStateException("__anbFile 过大: ${content.length}")
+            return JSONObject(content)
+        } finally {
+            f.delete()
+        }
+    }
 
     private fun facts(app: Application): String {
         val filesDir = app.filesDir

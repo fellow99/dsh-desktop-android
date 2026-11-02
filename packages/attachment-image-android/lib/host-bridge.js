@@ -11,6 +11,7 @@
  * 位置契约：`host.js` 在载荷根（`DSH_PAYLOAD_DIR`，即 Kotlin 侧 payloadRoot / Node cwd）。
  */
 import { createRequire } from 'node:module'
+import fs from 'node:fs'
 import path from 'node:path'
 
 /** ark 版同名兼容导出：通用超时（§6.4 默认 15s）。 */
@@ -75,6 +76,14 @@ export function isAvailable(capability = undefined) {
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
 
 /**
+ * 大数据入参文件通道的安全阈值（字节）。
+ * 原生 addon 入参静态缓冲 ANB_ARGS_CAP=8192（node_bridge.c / node_host_client.c），
+ * 超 8192 会抛 napi_throw_range_error("argument too long")。留信封余量：>7000 即走文件通道。
+ * 实测：8KB PNG 的 base64≈10.9KB → 必超；即 <6KB 的图片都无法直传，广告图/照片全部超界。
+ */
+export const ANB_ARGS_SAFE_LEN = 7000
+
+/**
  * 调用宿主能力（自动两段式）。
  * @param {string} capability
  * @param {Record<string, any>} args
@@ -87,7 +96,19 @@ export async function invoke(capability, args, options = undefined) {
   const bridge = await loadBridge()
   let response
   try {
-    response = await bridge.invoke(capability, args ?? {})
+    // 大数据入参文件通道：入参 JSON 超过原生 addon 的静态缓冲上限（ANB_ARGS_CAP=8192B）时，
+    // 落临时文件并用 {__anbFile: 绝对路径} 占位传给桥；Kotlin 分发前读回展开（HostCapabilities.kt guard）。
+    // 典型场景：image.normalize 携带整图 base64（>6KB 图即超界）；clipboard.readImage 写剪贴板同理。
+    let effectiveArgs = args ?? {}
+    const jsonStr = JSON.stringify(effectiveArgs)
+    if (jsonStr.length > ANB_ARGS_SAFE_LEN) {
+      const dir = process.env.TMPDIR || path.join(process.cwd(), '.anb-tmp')
+      fs.mkdirSync(dir, { recursive: true })
+      const file = path.join(dir, `anb-args-${process.pid}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}.json`)
+      fs.writeFileSync(file, jsonStr, 'utf8')
+      effectiveArgs = { __anbFile: file }
+    }
+    response = await bridge.invoke(capability, effectiveArgs)
   } catch (error) {
     throw new HostBridgeError('bridge-invoke-failed', `${capability}: ${error && error.message ? error.message : String(error)}`, { capability, cause: String(error && error.message) })
   }
