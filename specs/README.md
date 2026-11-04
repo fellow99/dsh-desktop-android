@@ -96,8 +96,9 @@
 | 107 | 诊断与可观测 | [107-diagnostics-observability/](./107-diagnostics-observability/) | 🟡 Partial | `/_android/facts` 已实现（debug-only 门禁，端点 200 实测）；selfcheck 待做 |
 | 108 | 合规与发布 | [108-compliance-release/](./108-compliance-release/) | 🟡 Partial | 双 flavor/签名规划已落 Gradle；发布材料待正式签名物料（T-008） |
 | 109 | Agent 保活 | [109-agent-keepalive/](./109-agent-keepalive/) | ✅ Delivered | KeepAliveService（dataSync FGS）+ power.keepAwake + 生命周期实证（2026-10-29） |
-| 110 | pnpm 集成 | [110-pnpm-integration/](./110-pnpm-integration/) | ✅ Delivered | 内置纯 JS pnpm 10.34.6 + worker 调用器 + desktopPnpm 契约（含 lookup）。原 `012-pnpm-integration` 改号，释放 012 给构建工作流 |
+| 110 | pnpm 集成 | [110-pnpm-integration/](./110-pnpm-integration/) | 🔁 已替换（→112） | 原纯 JS pnpm 10.34.6 + worker；`112-cli-integration` 起改为真实 pnpm 二进制（aosp-pnpm-cli，desktopPnpm 契约保留）。见 [112-cli-integration](./112-cli-integration/) |
 | 111 | PTY 完整终端 | [111-pty-integration/](./111-pty-integration/) | 🟡 Partial | 上架 node-runtime/pty AAR（引擎→26.13.0）+ spawnTerminal(node-pty) + 终端面板解禁；设备端取证待 real-device/模拟器（2026-11-01） |
+| 112 | CLI 集成 | [112-cli-integration/](./112-cli-integration/) | ✅ Delivered | 引入 aosp node/python/git/uv/pnpm 真实二进制（GitHub Release 第 1 轮）到运行环境；Agent 上下文命令与桌面一致；替换 204(isomorphic-git) 与 110(pnpm v10) 纯 JS 方案（真机实证 2026-11-05，logs/20261104-1） |
 
 > 本工程是 1XX 编号基准：`101 runtime-launch` / `102 payload` / `103 webview-shell` / `104 host-capability` / `105 upstream-adapter` / `106 workspace-picker` / `107 diagnostics` / `108 compliance` / `109 agent-keepalive` / `110 pnpm`。
 
@@ -108,7 +109,7 @@
 | # | 模块 | 目录 | 状态 | 说明 |
 |---|---|---|---|---|
 | 201 | dsh-market | [201-dsh-market/](./201-dsh-market/) | 🟡 Partial | 市场 UI/装/卸链就绪；G6 lookup 待上游 feature-detect（T-001） |
-| 204 | GIT 插件 | [204-plugin-git/](./204-plugin-git/) | ✅ Delivered | isomorphic-git 21 工具；clone/push 端到端实证（2026-10-29） |
+| 204 | GIT 插件 | [204-plugin-git/](./204-plugin-git/) | 🔁 已替换（→112） | 原 isomorphic-git 21 工具；`112-cli-integration` 起改为真实 git 二进制（aosp-git-cli）21 工具家族（表层不变）。见 [112-cli-integration](./112-cli-integration/) |
 | 205 | 品牌资产 / Web 品牌位 | [205-plugin-branding/](./205-plugin-branding/) | 🟡 Partial | 启动图标/应用名已定制；Web 侧品牌位需上游 seam（T-006 跟踪） |
 | 206 | 纯 JS 搜索 | [206-plugin-fs-search/](./206-plugin-fs-search/) | 🟡 Partial | 进程内 rg 替身已实现（@dsh-android/subprocess 内，T-013）；与真实 rg 偏差登记待收窄 |
 
@@ -132,6 +133,7 @@
 | 109 | Agent 保活 | agent-keepalive | 基础功能 |
 | 110 | pnpm 集成 | pnpm-integration | 基础功能 |
 | 111 | PTY 完整终端 | pty-integration | 基础功能 |
+| 112 | CLI 集成 | cli-integration | 基础功能 |
 | 201 | dsh-market | dsh-market | 插件 |
 | 204 | GIT 插件 | plugin-git | 插件 |
 | 205 | 品牌资产 / Web 品牌位 | plugin-branding | 插件 |

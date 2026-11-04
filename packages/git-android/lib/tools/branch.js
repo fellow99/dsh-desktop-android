@@ -66,9 +66,6 @@ export function applyGitBranchTool(ctx, deps) {
           throw new Error(`git_branch: action "${action}" requires name`)
         }
         if (action === 'create') {
-          const argv = ['branch']
-          if (args.checkout === true) argv.splice(1, 0, '-b')
-          /* 展开：'-b name from' 或 'branch name from' */
           const start = args.from ?? 'HEAD'
           if (args.checkout === true) {
             const r = await runGit({ cwd: opened.root, args: ['checkout', '-b', args.name, start], signal: exec.signal, timeoutMs: deps.config.networkTimeoutMs })
