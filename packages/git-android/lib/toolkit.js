@@ -87,25 +87,45 @@ export function parseStatusZ(zstdout) {
 export function parseLogRecords(out) {
   const text = Buffer.isBuffer(out) ? out.toString('utf8') : String(out || '')
   const records = []
-  const blocks = text.split(/\n\n/)
+  // 按新提交边界（行首 "commit "）切块，不能按空行切——`--pretty=raw` 的提交消息紧跟头部后的空行，
+  // 按 `\n\n` 切会把消息截到下一块。
+  const rawLines = text.split('\n')
+  let blocks = []
+  let current = null
+  for (const line of rawLines) {
+    if (line.startsWith('commit ')) {
+      current = [line]
+      blocks.push(current)
+    } else if (current !== null) {
+      current.push(line)
+    }
+  }
   for (const block of blocks) {
-    if (!block.startsWith('commit ')) continue
-    const lines = block.split('\n')
+    const lines = block
     const oid = lines[0].slice('commit '.length).trim()
-    const commit = { message: '', author: undefined, committer: undefined, tree: '', parent: [], gpgsig: undefined }
+    const commit = {}
     let messageLines = []
     let i = 1
     for (; i < lines.length; i++) {
       const line = lines[i]
       if (line.startsWith('tree ')) { commit.tree = line.slice(5).trim(); continue }
-      if (line.startsWith('parent ')) { commit.parent.push(line.slice(7).trim()); continue }
+      if (line.startsWith('parent ')) {
+        if (!Array.isArray(commit.parent)) commit.parent = []
+        commit.parent.push(line.slice(7).trim())
+        continue
+      }
       if (line.startsWith('author ')) { commit.author = identityOf(line.slice(7).trim()); continue }
       if (line.startsWith('committer ')) { commit.committer = identityOf(line.slice(10).trim()); continue }
-      if (line.startsWith('gpgsig ')) { commit.gpgsig = 'present'; continue }
       if (line === '') { break }
     }
     if (i < lines.length) messageLines = lines.slice(i + 1)
-    commit.message = messageLines.join('\n').replace(/^\n+/, '')
+    const message = messageLines.join('\n').replace(/^\n+/, '')
+    // 只写入有值字段（含 message/author/parent 缺省），确保 JSON 无损往返。
+    if (message !== '') commit.message = message
+    if (commit.author === undefined) commit.author = identityOf('')
+    if (commit.committer === undefined) commit.committer = identityOf('')
+    if (!Array.isArray(commit.parent)) commit.parent = []
+    if (commit.tree === undefined) commit.tree = ''
     records.push({ oid, commit })
   }
   return records
