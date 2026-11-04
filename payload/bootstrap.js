@@ -209,6 +209,13 @@ async function main() {
   let nodePtyShim = { marker: 'DSH_ANDROID_SHIM node-pty', installed: false };
   try { nodePtyShim = require('./shims/s6-node-pty.js').install(log); } catch (e) { log('s6-node-pty shim install failed: ' + e.message); }
 
+  // 112-cli-integration：CLI 环境引导层（$HOME/bin 农场 + env 注入 + 版本探针）
+  let cliEnv = { marker: 'DSH_CLI_ENV', installed: false, tools: {} };
+  try {
+    cliEnv = require('./cli-env.js').install(log);
+    log(`cli-env: installed=${cliEnv.installed}`);
+  } catch (e) { log('cli-env install failed: ' + e.message); }
+
   const shims = [
     { marker: 'DSH_ANDROID_SHIM flock', installed: fs.existsSync(path.join(RUN_ROOT, 'node_modules', '@deepseek-ai', 'node-addon-system', 'lib', 'flock.js')) },
     { marker: 'DSH_ANDROID_SHIM sharp', installed: false },
@@ -216,7 +223,9 @@ async function main() {
     fsLinkShim,
     fsSymlinkShim,
     nodePtyShim,
+    { marker: cliEnv.marker, installed: cliEnv.installed },
   ];
+  const cliProbes = cliEnv.tools || {};
   try {
     const sharpPkg = JSON.parse(fs.readFileSync(path.join(RUN_ROOT, 'node_modules', 'sharp', 'package.json'), 'utf8'));
     shims[1].installed = sharpPkg.dshAndroidShim === 'S2';
@@ -235,6 +244,7 @@ async function main() {
     version,
     shims,
     probes,
+    cliProbes,
     profileName: process.env.DSH_PROFILE_NAME || 'android',
     log,
     writeReady,

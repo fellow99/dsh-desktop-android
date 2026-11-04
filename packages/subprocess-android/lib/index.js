@@ -59,11 +59,22 @@ export const DEFAULT_PATH = `${SYSTEM_BIN_ROOT}:/system/xbin:/usr/bin:/bin`
 /** Credential-shaped environment names are never inherited from the parent. */
 export const SENSITIVE_ENV_PATTERN = /KEY|PASSWORD|SECRET|TOKEN/i
 
-/** Ambient environment names forwarded to children (`DSH_*` is handled separately). */
-export const ENV_ALLOWLIST = Object.freeze(['PATH', 'HOME', 'TMPDIR', 'LANG'])
+/** Ambient environment names forwarded to children (`DSH_*` is handled separately).
+ * 112-cli-integration：追加 CLI 运行期 env（LD_LIBRARY_PATH / npm-node / python / git / ssl），
+ * 否则 git 插件、python、npm 的子进程拿不到引导层注入的必要环境。 */
+export const ENV_ALLOWLIST = Object.freeze([
+  'PATH', 'HOME', 'TMPDIR', 'LANG',
+  'LD_LIBRARY_PATH', 'NODE_TOOLS_DIR', 'SSL_CERT_FILE',
+  'GIT_CONFIG_GLOBAL', 'GIT_TEMPLATE_DIR', 'GIT_EXEC_PATH', 'GIT_PAGER',
+  'PYTHONHOME', 'PYTHONPATH', 'PYTHONNOUSERSITE',
+  'npm_config_registry',
+])
 
 /** Workspace seam variable set by the ArkTS runtime (`DshRuntime.ets:118-123`). */
 export const WORKSPACE_ENV = 'DSH_ANDROID_WORKSPACE'
+
+/** 112-cli-integration：CLI 可执行根（nativeLibraryDir，Kotlin DshRuntime 下发）。 */
+export const NATIVE_LIB_DIR_ENV = 'DSH_ANDROID_NATIVE_LIB_DIR'
 
 /** Lazy node-pty loader: the native addon is only required when a terminal is
  * spawned, after the S6 payload shim has pointed node-pty's native resolution
@@ -209,6 +220,16 @@ export function validateSubprocessSpec(spec) {
 }
 
 /**
+ * 112-cli-integration：nativeLibraryDir（exec 型 CLI 二进制所在，如 libnode_cli.so）。
+ * @param {NodeJS.ProcessEnv} [env]
+ * @returns {string | undefined}
+ */
+export function nativeLibDirRoot(env = process.env) {
+  const value = env[NATIVE_LIB_DIR_ENV]
+  return typeof value === 'string' && value.startsWith('/') ? value : undefined
+}
+
+/**
  * True when `path` is an allowed executable location after canonicalization.
  * @param {string} path - absolute path.
  * @param {string} [workspace]
@@ -217,6 +238,8 @@ export function validateSubprocessSpec(spec) {
 export function isAllowedExecutable(path, workspace = workspaceRoot()) {
   const canonical = canonicalPath(path)
   if (canonical === TOYBOX || canonical.startsWith(`${SYSTEM_BIN_ROOT}/`)) return true
+  const nldir = nativeLibDirRoot()
+  if (nldir !== undefined && isPathUnder(canonical, nldir)) return true
   if (workspace === undefined) return false
   return isPathUnder(canonical, workspace)
 }
@@ -257,7 +280,7 @@ export function resolveProgram(command, env, signal) {
     }
     if (!isAllowedExecutable(command, workspace)) {
       throw new SubprocessExecutableNotFoundError(
-        `subprocess-android: "${command}" is outside the allowed executable roots (${SYSTEM_BIN_ROOT}/**, ${TOYBOX}, workspace scripts)`,
+        `subprocess-android: "${command}" is outside the allowed executable roots (${SYSTEM_BIN_ROOT}/**, ${TOYBOX}, nativeLibraryDir, workspace scripts)`,
       )
     }
     assertExecutable(canonicalPath(command), command)

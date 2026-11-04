@@ -39,14 +39,12 @@ google-services.json
 # ── dsh-desktop-android：二进制不入库（docs/000-工程规划.md §13）─────────────
 # 引擎（libnode.so / libc++_shared.so，由 scripts/provision-engine.mjs 投放）
 app/src/main/jniLibs/
+# CLI 五件套数据资产（112-cli-integration；由 scripts/provision-cli.mjs 投放）
+app/src/main/assets/cli/
 # 载荷产物（由 scripts/package-payload.mjs 生成）
 app/src/main/assets/dsh-payload/
 # Node 侧依赖与构建中间物
 node_modules/
-
-# 例外：git 插件随包 vendor 闭包（204；assemble-payload assertGitClosure 依赖，勿被上方 node_modules/ 吞掉）
-!packages/git-android/node_modules/
-!packages/git-android/node_modules/**
 
 # CodeGraph 语义代码地图（本地索引，不入库）
 .codegraph

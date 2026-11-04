@@ -1,20 +1,17 @@
 /**
- * In-process pnpm runner: runs the materialized pure-JS pnpm CLI inside a
- * worker thread and adapts it to the market's `DesktopPnpmLike.runPlugin`
+ * pnpm runner: runs the real `pnpm` CLI binary (aosp-pnpm-cli, 112-cli-integration)
+ * as a child process and adapts it to the market's `DesktopPnpmLike.runPlugin`
  * handle (`{ stdout, stderr, done, cancel }`).
  *
- * No node/pnpm child process is ever spawned: a worker thread is the same OS
- * process, so the platform rule that kills forked JIT children does not apply.
+ * Replaces the worker-thread + pure-JS pnpm (v10) engine of specs/110:
+ * `DSH_PNPM_ENGINE` now names the `$HOME/bin/pnpm` symlink → nativeLibraryDir
+ * `libpnpm_cli.so` (the exec-type Rust binary). pnpm 12+ runs its lifecycle
+ * scripts with the `node` on PATH (cli-env farm guarantees it).
  *
  * Design notes (see `docs/pnpm+dsh-market.md` §3.3):
- * - Completion signal is the **worker exit code**. pnpm's CLI is
- *   fire-and-forget: `import(entry)` resolves long before an install finishes
- *   and the success path never calls `process.exit`, so an in-thread run has no
- *   decidable completion condition. There is deliberately **no in-thread
- *   fallback**; a worker that cannot start fails with 127.
- * - One operation at a time. A second concurrent call throws synchronously:
- *   `dsh-market` classifies a thrown `/another desktop pnpm operation is already running/i`
- *   as `busy`, and a returned handle would be reported as an ordinary failure instead.
+ * - Completion signal is the **child exit code** (same contract as the worker's).
+ * - One operation at a time: a second concurrent call throws synchronously with
+ *   the busy message the market classifies as `busy`.
  *
  * @module @dsh-android/market/pnpm-inprocess
  */
@@ -22,10 +19,7 @@
 import { statSync } from 'node:fs'
 import { join } from 'node:path'
 import { PassThrough } from 'node:stream'
-import { Worker } from 'node:worker_threads'
-
-/** Worker entry, resolved relative to this module so it ships beside it. */
-const WORKER_URL = new URL('./pnpm-worker.mjs', import.meta.url)
+import { spawn } from 'node:child_process'
 
 /** Busy message the market matches on (`dsh-market/src/dsh-cli.ts:1395-1405`). */
 export const BUSY_MESSAGE = 'another desktop pnpm operation is already running'
@@ -37,8 +31,8 @@ let activeOperation = null
 let lastRun = null
 
 /**
- * The materialized pnpm engine entry, from `DSH_PNPM_ENGINE` (set by the Host
- * before `runProfile`).
+ * The pnpm engine entry, from `DSH_PNPM_ENGINE` (set by cli-env / host-boot:
+ * `$HOME/bin/pnpm` → nativeLibraryDir/libpnpm_cli.so).
  * @param {NodeJS.ProcessEnv} [env] - environment, injectable for tests.
  * @returns {string | null} the entry path, or null when unset.
  */
@@ -48,8 +42,8 @@ export function resolveEngineEntry(env = process.env) {
 }
 
 /**
- * Whether a path is a usable pnpm engine entry: an existing, non-empty file.
- * Never throws.
+ * Whether a path is a usable pnpm engine entry: an existing, non-empty file
+ * (symlink to the CLI binary counts; statSync follows it).
  * @param {string | null} entry - candidate path.
  * @returns {boolean} true when usable.
  */
@@ -74,57 +68,61 @@ export function isRunning() {
 }
 
 /**
- * Compose the argv pnpm's CLI expects. The second element is ignored by pnpm;
- * `--dir` makes the launched profile authoritative regardless of `process.cwd()`
- * (which is `/` on device).
- * @param {string} entry - engine entry path.
+ * Compose the argv the pnpm CLI expects. `--dir` makes the launched profile
+ * authoritative regardless of process.cwd() (which is `/` on device).
+ * @param {string} entry - engine entry path (the pnpm binary).
  * @param {readonly string[]} args - market argv.
  * @param {string} dir - absolute profile directory.
- * @param {string} execPath - value for `argv[0]`.
- * @returns {string[]} argv for the worker realm.
+ * @param {string} execPath - ignored (kept for signature compatibility).
+ * @returns {string[]} argv for the pnpm child process.
  */
 export function composeArgv(entry, args, dir, execPath) {
-  return [execPath, entry, ...args.map((value) => String(value)), '--dir', dir]
+  return [entry, ...args.map((value) => String(value)), '--dir', dir]
 }
 
 /**
- * Probe whether a worker thread can start and post a message.
+ * Probe whether the pnpm engine can start and answer `--version`.
  * @param {number} [timeoutMs] - budget; the probe never outlives it.
  * @returns {Promise<{ ok: boolean, detail?: string }>} probe facts, never throws.
  */
-export function probeWorker(timeoutMs = 2000) {
+export function probeWorker(timeoutMs = 5000) {
+  const entry = resolveEngineEntry()
+  if (!assertPnpmEngine(entry)) {
+    return Promise.resolve({ ok: false, detail: `pnpm engine entry not found: ${entry ?? '(unset)'}` })
+  }
   return new Promise((resolve) => {
-    let worker
     let settled = false
-    let timer
-    const finish = (result) => {
-      if (settled) return
-      settled = true
-      if (timer !== undefined) clearTimeout(timer)
-      try {
-        void worker?.terminate()
-      } catch {
-        // The worker may already be gone; the probe result is what matters.
-      }
-      resolve(result)
-    }
-    timer = setTimeout(() => finish({ ok: false, detail: `probe timed out after ${timeoutMs} ms` }), timeoutMs)
+    const timer = setTimeout(() => {
+      if (!settled) { settled = true; resolve({ ok: false, detail: `probe timed out after ${timeoutMs} ms` }) }
+    }, timeoutMs)
     timer.unref?.()
     try {
-      // `eval: true` compiles the first argument as the worker's source.
-      worker = new Worker('require("node:worker_threads").parentPort.postMessage(1)', { eval: true })
+      const child = spawn(entry, ['--version'], { stdio: ['ignore', 'pipe', 'pipe'] })
+      let out = ''
+      child.stdout.on('data', (c) => { out += c })
+      child.on('error', (error) => {
+        if (settled) return
+        settled = true
+        clearTimeout(timer)
+        resolve({ ok: false, detail: error instanceof Error ? error.message : String(error) })
+      })
+      child.on('close', (code) => {
+        if (settled) return
+        settled = true
+        clearTimeout(timer)
+        resolve(code === 0 ? { ok: true, detail: out.trim() } : { ok: false, detail: `probe exited (code ${String(code)})` })
+      })
     } catch (error) {
-      finish({ ok: false, detail: error instanceof Error ? error.message : String(error) })
-      return
+      if (settled) return
+      settled = true
+      clearTimeout(timer)
+      resolve({ ok: false, detail: error instanceof Error ? error.message : String(error) })
     }
-    worker.once('message', () => finish({ ok: true }))
-    worker.once('error', (error) => finish({ ok: false, detail: error instanceof Error ? error.message : String(error) }))
-    worker.once('exit', (code) => finish(code === 0 ? { ok: true } : { ok: false, detail: `probe exited early (code ${String(code)})` }))
   })
 }
 
 /**
- * Run one pnpm command in-process (worker thread).
+ * Run one pnpm command (spawn the real pnpm binary).
  *
  * @param {readonly string[]} args - pnpm argv, e.g. `['add', '-w', 'pkg@1.2.3']`.
  * @param {{ dir?: string, entry?: string, signal?: AbortSignal }} [options]
@@ -147,7 +145,7 @@ export function runPnpmInProcess(args, options = {}) {
   let cancelled = false
   let resolveDone
   let onAbort
-  /** Accumulated worker stderr, for host-side diagnostics on failure (market UI truncates the stack). */
+  /** Accumulated child stderr, for host-side diagnostics on failure. */
   let capturedStderr = ''
   const done = new Promise((resolve) => {
     resolveDone = resolve
@@ -160,8 +158,6 @@ export function runPnpmInProcess(args, options = {}) {
     if (options.signal !== undefined && onAbort !== undefined) options.signal.removeEventListener('abort', onAbort)
     lastRun = { args: args.map((value) => String(value)), dir: dir ?? null, exitCode: result.exitCode, at: Date.now() }
     if (capturedStderr !== '') {
-      // Surface the full error to the host log (node_bridge.log): the market UI only keeps the
-      // last few stack frames and drops the message line, leaving device failures undiagnosable.
       console.error(`[market-pnpm] pnpm failed (exit ${String(result.exitCode)}):\n${capturedStderr.slice(-8000)}`)
     }
     stdout.end()
@@ -169,10 +165,6 @@ export function runPnpmInProcess(args, options = {}) {
     resolveDone(result)
   }
 
-  /**
-   * Fail without starting a worker but let the caller attach stream listeners
-   * first: the write and settlement are deferred to a microtask.
-   */
   const failNow = (code, message) => {
     queueMicrotask(() => {
       stderr.write(message)
@@ -188,55 +180,64 @@ export function runPnpmInProcess(args, options = {}) {
     return failNow(
       127,
       `[market-pnpm] pnpm engine entry not found: ${entry ?? '(unset)'} (DSH_PNPM_ENGINE)\n`
-      + '[market-pnpm] the engine is materialized by scripts/assemble-payload.mjs (collectMarketPNPM)\n',
+      + '[market-pnpm] the engine is the aosp-pnpm-cli binary wired by payload/cli-env.js ($HOME/bin/pnpm)\n',
     )
   }
 
   const argv = composeArgv(entry, args, dir, process.execPath)
   activeOperation = token
 
-  let worker
+  let child
   try {
-    worker = new Worker(WORKER_URL, {
-      workerData: {
-        entry,
-        args: argv.slice(2),
-        cacheDir: join(dir, '.pnpm-cache'),
-        compatEntry: process.env.DSH_ANDROID_JITLESS_ENTRY ?? '',
+    child = spawn(entry, argv.slice(1), {
+      cwd: dir,
+      stdio: ['ignore', 'pipe', 'pipe'],
+      env: {
+        ...process.env,
+        CI: 'true',
+        npm_config_package_import_method: 'copy',
+        pnpm_config_package_import_method: 'copy',
+        npm_config_registry: process.env.npm_config_registry ?? process.env.DSH_ANDROID_REGISTRY,
+        XDG_CACHE_HOME: join(dir, '.pnpm-cache'),
+        XDG_DATA_HOME: join(dir, '.pnpm-cache'),
+        XDG_STATE_HOME: join(dir, '.pnpm-cache'),
+        TMPDIR: join(dir, '.pnpm-cache', 'tmp'),
       },
     })
   } catch (error) {
     activeOperation = null
     const detail = error instanceof Error ? error.message : String(error)
-    return failNow(127, `[market-pnpm] worker could not start: ${detail}\n`)
+    return failNow(127, `[market-pnpm] pnpm could not start: ${detail}\n`)
   }
 
-  worker.on('message', (message) => {
-    if (message === null || typeof message !== 'object') return
-    if (message.type === 'stdout') stdout.write(String(message.text))
-    else if (message.type === 'stderr') { capturedStderr += String(message.text); if (capturedStderr.length > 24000) capturedStderr = capturedStderr.slice(-24000); stderr.write(String(message.text)) }
+  child.stdout.on('data', (chunk) => stdout.write(chunk))
+  child.stderr.on('data', (chunk) => {
+    capturedStderr += String(chunk)
+    if (capturedStderr.length > 24000) capturedStderr = capturedStderr.slice(-24000)
+    stderr.write(chunk)
   })
-  worker.on('error', (error) => {
-    const text = `[market-pnpm] worker error: ${error && error.stack ? error.stack : String(error)}\n`
+  child.on('error', (error) => {
+    const text = `[market-pnpm] pnpm error: ${error && error.stack ? error.stack : String(error)}\n`
     capturedStderr += text
     stderr.write(text)
     console.error(text)
   })
-  worker.on('exit', (code) => {
+  child.on('close', (code, signal) => {
     if (cancelled) {
       stderr.write('[market-pnpm] cancelled: the pnpm operation was terminated\n')
-      finish({ exitCode: code === 0 || code === null ? 1 : code, signal: null })
+      finish({ exitCode: code === 0 || code === null ? 1 : code, signal })
       return
     }
-    finish({ exitCode: code ?? 0, signal: null })
+    finish({ exitCode: code ?? 1, signal })
   })
 
-  onAbort = () => {
+  const kill = () => {
     cancelled = true
-    void worker.terminate()
+    try { child.kill('SIGKILL') } catch { /* already gone */ }
   }
+  onAbort = kill
   if (options.signal !== undefined) {
-    if (options.signal.aborted) onAbort()
+    if (options.signal.aborted) kill()
     else options.signal.addEventListener('abort', onAbort, { once: true })
   }
 
@@ -245,8 +246,7 @@ export function runPnpmInProcess(args, options = {}) {
     stderr,
     done,
     cancel() {
-      cancelled = true
-      void worker.terminate()
+      kill()
     },
   }
 }

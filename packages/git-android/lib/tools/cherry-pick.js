@@ -1,55 +1,28 @@
 /**
- * The model-facing `git_cherry_pick` tool: replay one commit onto the current branch.
- *
- * isomorphic-git's `cherryPick` keeps the picked commit's author and uses the caller's
- * committer (see its `commands/cherryPick.js`), so only the committer identity is supplied
- * here. As with `git_merge`, `abortOnConflict` stays on: a conflict throws, names the
- * conflicting paths, and leaves the working tree alone.
+ * The model-facing `git_cherry_pick` tool.
+ * 112：后端改为真实 `git cherry-pick`。
  *
  * @module @dsh-android/git/tools/cherry-pick
  */
 
 import { defineTool } from '@deepseek-ai/dsh-tools'
-import { loadGit } from '../runtime.js'
-import { renderConflicts, shortOid } from '../report.js'
-import { resolveIdentity, resolveRevision } from './commit.js'
+import { runGit, headOid, resolveRev } from '../git-exec.js'
+import { openRepo } from '../toolkit.js'
+import { resolveIdentity } from './commit.js'
 
-/**
- * Register the `git_cherry_pick` tool.
- * @param ctx - the plugin context; `ctx.tools` receives the registration.
- * @param deps - shared collaborators.
- * @param {import('../fence.js').GitRepositoryFence} deps.fence - the repository fence.
- * @param {object} deps.config - the resolved plugin config.
- */
 export function applyGitCherryPickTool(ctx, deps) {
   ctx.tools.register(defineTool({
     name: 'git_cherry_pick',
-    description: 'Apply the changes of one commit (`oid`: a full or abbreviated commit id, a branch or a tag) onto '
-      + 'the checked-out branch as a new commit. The new commit keeps the picked commit\'s author and message and '
-      + 'records you as the committer. `dryRun: true` reports whether the pick would succeed without writing '
-      + 'anything. A conflict makes the call fail and lists the conflicting paths without touching the working tree '
-      + '(abortOnConflict stays on). The reverse operation is git_revert, which is implemented separately because '
-      + 'the underlying git library has no reversal primitive. Fails when `oid` cannot be resolved, when the commit '
-      + 'is a merge commit or a root commit (the underlying implementation refuses both), or when `dir` is not a '
-      + 'repository; a `dir` outside the session workspace is refused with an escalation hint.',
+    description: 'Apply the change introduced by commit `oid` on top of the current HEAD as a new commit. Full or '
+      + 'abbreviated commit ids, tags, branch names, and ancestry syntax work. `dryRun: true` checks that the pick '
+      + 'would start cleanly without writing. Fails on conflicts (naming the paths), when `oid` cannot be resolved, '
+      + 'or when `dir` is not a repository; a `dir` outside the session workspace is refused with an escalation hint.',
     parameters: {
-      dir: {
-        type: 'string',
-        required: true,
-        description: 'Repository root. Resolved against the session workspace; outside it the call is refused '
-          + 'until a one-shot escalation is approved.',
-      },
-      oid: {
-        type: 'string',
-        required: true,
-        description: 'The commit to pick: a full or abbreviated commit id, a tag, or a branch name.',
-      },
-      dryRun: {
-        type: 'boolean',
-        description: 'Simulate the pick and report whether it would succeed, without writing. Defaults to false.',
-      },
-      committerName: { type: 'string', description: 'Committer name for the new commit, overriding the config.' },
-      committerEmail: { type: 'string', description: 'Committer email for the new commit, overriding the config.' },
+      dir: { type: 'string', required: true, description: 'Repository root. Resolved against the session workspace.' },
+      oid: { type: 'string', required: true, description: 'The commit to pick.' },
+      dryRun: { type: 'boolean', description: 'Check whether the pick would succeed, without writing. Defaults to false.' },
+      committerName: { type: 'string', description: 'Committer name for the new commit.' },
+      committerEmail: { type: 'string', description: 'Committer email for the new commit.' },
       ...deps.fence.escalationFields(),
     },
     output: {
@@ -69,59 +42,39 @@ export function applyGitCherryPickTool(ctx, deps) {
         type: 'text',
         text: value.dryRun
           ? `Dry run: picking ${value.oid} onto the current branch would succeed. Nothing was written.`
-          : `Picked ${value.oid} as new commit ${value.committed} `
+          : `Picked ${value.oid} as new commit ${value.committed.slice(0, 12)} `
             + `(committer ${value.committer}, from ${value.identitySource}).`,
       }],
     },
     async execute(args, exec) {
-      let policy
+      const { opened, mapError } = await openRepo(deps, 'git_cherry_pick', args, exec)
       try {
-        const opened = await deps.fence.open('git_cherry_pick', args, exec, args.dir)
-        policy = opened.policy
-        const { git } = await loadGit()
-        const fs = opened.fs
-        const dir = opened.root
-        const identity = await resolveIdentity(git, fs, dir, deps.config, {
-          ...args.committerName === undefined ? {} : { authorName: args.committerName },
-          ...args.committerEmail === undefined ? {} : { authorEmail: args.committerEmail },
-        })
-        // The pick's author is the original commit's author; only the committer is ours.
-        const committer = { name: identity.name, email: identity.email }
-        const { oid } = await resolveRevision(git, fs, dir, args.oid)
-        const committed = await git.cherryPick({
-          fs,
-          dir,
-          oid,
-          dryRun: args.dryRun === true,
-          abortOnConflict: true,
-          committer,
-          signal: exec.signal,
-        })
-        return {
-          root: dir,
-          oid: args.oid,
-          committed: shortOid(committed, 40) ?? '',
-          dryRun: args.dryRun === true,
-          committer: `${identity.name} <${identity.email}>`,
-          identitySource: identity.source,
+        const root = opened.root
+        const oid = await resolveRev(root, args.oid)
+        const identity = await resolveIdentity(root, deps.config, { authorName: args.committerName, authorEmail: args.committerEmail })
+        if (args.dryRun === true) {
+          const check = await runGit({ cwd: root, args: ['status', '--porcelain'], signal: exec.signal })
+          const dirty = check.code === 0 && check.stdout.trim() !== ''
+          if (dirty) throw new Error('git_cherry_pick: the working tree has uncommitted changes that would block a clean pick (dry run).')
+          return { root, oid, committed: await headOid(root) ?? '', dryRun: true, committer: `${identity.name} <${identity.email}>`, identitySource: identity.source }
         }
+        const r = await runGit({
+          cwd: root, args: ['cherry-pick', oid], signal: exec.signal, timeoutMs: deps.config.networkTimeoutMs,
+          env: { GIT_AUTHOR_NAME: identity.name, GIT_AUTHOR_EMAIL: identity.email, GIT_COMMITTER_NAME: identity.name, GIT_COMMITTER_EMAIL: identity.email },
+        })
+        if (r.code === 0) {
+          const committed = await headOid(root)
+          return { root, oid, committed: committed ?? '', dryRun: false, committer: `${identity.name} <${identity.email}>`, identitySource: identity.source }
+        }
+        const stderr = r.stderr.trim()
+        if (/CONFLICT/i.test(stderr)) {
+          throw new Error('@dsh-android/git: the cherry-pick conflicted. Resolve the conflicts, stage them with '
+            + 'git_add, then finish with a new git_commit.\n' + stderr.split('\n').filter((l) => l.includes('CONFLICT')).slice(0, 10).join('\n'))
+        }
+        throw new Error(`@dsh-android/git: git cherry-pick failed (${stderr.slice(0, 800)})`)
       } catch (error) {
         if (exec.signal.aborted) throw error
-        const filepaths = error instanceof Error && Array.isArray(error.data?.filepaths)
-          ? error.data.filepaths
-          : undefined
-        if (error instanceof Error && error.code === 'MergeConflictError' && filepaths !== undefined) {
-          throw new Error(renderConflicts(filepaths, {
-            reason: `Cherry-pick refused: ${filepaths.length} conflicting path(s). Nothing was written to the `
-              + 'working tree or the index.',
-            next: 'Pick a different commit, or apply the change by hand (git_show for the content, then edit, '
-              + 'git_add, git_commit).',
-          }))
-        }
-        throw deps.fence.mapError(
-          error,
-          policy ?? await deps.fence.resolvePolicy('git_cherry_pick', args, exec),
-        )
+        throw await mapError(error)
       }
     },
   }))

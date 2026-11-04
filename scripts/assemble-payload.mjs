@@ -371,11 +371,16 @@ function collectAndroidPackages(runTree) {
 }
 
 // ── P3：随包物化（git 闭包 / pnpm 引擎 / dshmarket）────────────────────────
-const PNPM_VERSION = '10.34.6';
- const MARKET_ROOT = resolve(process.env.DSH_MARKET_DIR ?? resolve(ROOT, '../dsh-market'));
-const GIT_CLOSURE_MIN_PACKAGES = 50;
+const MARKET_ROOT = resolve(process.env.DSH_MARKET_DIR ?? resolve(ROOT, '../dsh-market'));
 
-/** 断言 @dsh-android/git 自带的 isomorphic-git 闭包完整（vendor 随包，无需 pnpm add）。 */
+/** 断言 @dsh-android/git 插件入口可解析（112-cli-integration：真实 git 二进制后端，无需 vendor isomorphic-git）。 */
+function assertGitPlugin(runTree) {
+  const entry = resolve(runTree, 'node_modules/@dsh-android/git/lib/index.js');
+  if (!existsSync(entry)) {
+    fail(1, `git 插件入口缺失：${entry}（packages/git-android 需随包物化）`);
+  }
+  log('✓ git 插件：@dsh-android/git（真实 git 二进制后端，无 isomorphic-git）已物化');
+}
 function assertGitClosure(runTree) {
   const nested = resolve(runTree, 'node_modules/@dsh-android/git/node_modules');
   const manifest = resolve(nested, 'isomorphic-git/package.json');
@@ -769,9 +774,9 @@ function overlay(runTree) {
   const plugins = collectAndroidPackages(runTree);
   log(`本工程包已注入：${plugins.length} 个（${plugins.join(', ')}）`);
 
-  // P3：git 闭包断言 + pnpm 引擎 + dshmarket
-  assertGitClosure(runTree);
-  try { collectMarketPNPM(runTree); } catch (e) { fail(1, `012 物化失败：${e.message}`); }
+  // P3：git 插件断言 + pnpm 引擎（112 起 = aosp-pnpm-cli 二进制，经 cli-env 农场接入）
+  assertGitPlugin(runTree);
+  log('112：pnpm 引擎改自 aosp-pnpm-cli（$HOME/bin/pnpm），不再物化纯 JS pnpm（110 已替换）');
   try { collectReflinkStub(runTree); } catch (e) { fail(1, `201 reflink 存根失败：${e.message}`); }
   try { collectRipgrepStub(runTree); } catch (e) { fail(1, `206 rg 存根物化失败：${e.message}`); }
   try { patchPluginManagerLookup(runTree); } catch (e) { fail(1, `T-001 补丁失败：${e.message}`); }
@@ -792,6 +797,22 @@ function overlay(runTree) {
   }
 }
 
+/**
+ * 112-cli-integration（D3）：CLI 数据资产（npm/corepack / python stdlib / git 模板+cacert）
+ * 随载荷一并打包，物化到运行树 `dsh/cli-data/`（assets 不是文件系统路径，必须物化）。
+ * 来源：scripts/provision-cli.mjs 投放的 `app/src/main/assets/cli/`。
+ * @param {string} runTree - stage 的 `root/dsh`
+ */
+function copyCliData(runTree) {
+  const cliAssets = resolve(ROOT, 'app/src/main/assets/cli');
+  if (!existsSync(cliAssets)) {
+    log('警告：assets/cli 不存在（未投放 CLI？），跳过 cli-data');
+    return;
+  }
+  const dst = resolve(runTree, 'cli-data');
+  cpSync(cliAssets, dst, { recursive: true, dereference: true });
+}
+
 function assertStage(root) {
   const checks = [];
   const runTree = resolve(root, 'dsh');
@@ -800,6 +821,12 @@ function assertStage(root) {
   checks.push(['@deepseek-ai/dsh 存在', existsSync(resolve(runTree, 'node_modules/@deepseek-ai/dsh/package.json'))]);
   checks.push(['Web UI dist 存在', existsSync(resolve(runTree, 'node_modules/@deepseek-ai/dsh-web-frontend/dist/index.html'))]);
   checks.push(['profiles/android 存在', existsSync(resolve(runTree, 'profiles/android/package.json'))]);
+  checks.push(['cli-data（112）存在', (() => {
+    const cli = resolve(runTree, 'cli-data');
+    return existsSync(resolve(cli, 'node/node-bridge-tools'))
+      && existsSync(resolve(cli, 'python/stdlib-assets'))
+      && existsSync(resolve(cli, 'git/git-bridge-tools'));
+  })()]);
   const rows = assertInsertedRowsResolve(runTree);
   checks.push([`bundle 引用可解析（${rows.length} 行）`, true]);
   checks.push(['sharp 垫片（S2）', (() => {
@@ -840,6 +867,8 @@ function main() {
   }
   // 覆盖层作用于运行树
   overlay(resolve(root, 'dsh'));
+  // 112-cli-integration（D3）：CLI 数据资产 → 运行树 cli-data
+  copyCliData(resolve(root, 'dsh'));
   assertStage(root);
 
   if (!apply) {

@@ -1,0 +1,74 @@
+{
+  "schema": 1,
+  "note": "CLI 五件套事实源（112-cli-integration）。第 1 轮：GitHub Release 归档；第 2 轮规划：Maven Central（同版本线）。sha256 与 release 官方 .sha256 核对一致（2026-11-04）。",
+  "active": {
+    "node": "26.13.0",
+    "python": "3.14.10",
+    "git": "2.56.0",
+    "uv": "0.13.6",
+    "pnpm": "12.16.1"
+  },
+  "tools": {
+    "node": {
+      "version": "26.13.0",
+      "repo": "aosp-node-cli",
+      "archive": "node-cli-v26.13.0-android-arm64-v8a.tar.gz",
+      "url": "https://github.com/fellow99/aosp-node-cli/releases/download/v26.13.0/node-cli-v26.13.0-android-arm64-v8a.tar.gz",
+      "sha256": "60d7d89919f93bcb279411ad872ca4babbe023a080a3de4e21c50057d682803f",
+      "size": 46531153,
+      "strip": 0,
+      "jni": ["libnode_cli.so", "libnpm.so", "libnpx.so", "libcorepack.so"],
+      "assets": ["node-bridge-tools"],
+      "licenses": ["LICENSE", "THIRD-PARTY-NOTICES.md"]
+    },
+    "python": {
+      "version": "3.14.10",
+      "repo": "aosp-python-cli",
+      "archive": "python-cli-v3.14.10-android-arm64-v8a.tar.gz",
+      "url": "https://github.com/fellow99/aosp-python-cli/releases/download/v3.14.10/python-cli-v3.14.10-android-arm64-v8a.tar.gz",
+      "sha256": "b4b90341bfad6bf2e423842fe7bafb49b27d5f0b9585c3581d36b6567757571c",
+      "size": 24288587,
+      "strip": 1,
+      "jni": ["libpython_cli.so", "libpip.so", "libpip3.so"],
+      "assets": ["stdlib-assets"],
+      "licenses": ["LICENSE", "THIRD-PARTY-NOTICES.md"]
+    },
+    "git": {
+      "version": "2.56.0",
+      "repo": "aosp-git-cli",
+      "archive": "git-cli-v2.56.0-android-arm64-v8a.tar.gz",
+      "url": "https://github.com/fellow99/aosp-git-cli/releases/download/v2.56.0/git-cli-v2.56.0-android-arm64-v8a.tar.gz",
+      "sha256": "001aae771e11ad50d2298bd3c55f5ce072f08cd2d0abd012cd964745ade0e349",
+      "size": 80651789,
+      "strip": 1,
+      "jni": ["libgit_cli.so", "libgit_http_fetch.so", "libgit_remote_curl.so"],
+      "assets": ["assets/git-bridge-tools"],
+      "licenses": ["LICENSE", "THIRD-PARTY-NOTICES.md"],
+      "extra": ["helper-inventory.json"]
+    },
+    "uv": {
+      "version": "0.13.6",
+      "repo": "aosp-uv-cli",
+      "archive": "uv-cli-v0.13.6-android-arm64-v8a.tar.gz",
+      "url": "https://github.com/fellow99/aosp-uv-cli/releases/download/v0.13.6/uv-cli-v0.13.6-android-arm64-v8a.tar.gz",
+      "sha256": "d3bfc4d30b3e950c23aab33d7ba5bded21b7a4fe5d99a73f68a8cedf2cb85b52",
+      "size": 16146767,
+      "strip": 0,
+      "jni": ["libuv_cli.so"],
+      "assets": [],
+      "licenses": ["LICENSE", "THIRD-PARTY-NOTICES.md"]
+    },
+    "pnpm": {
+      "version": "12.16.1",
+      "repo": "aosp-pnpm-cli",
+      "archive": "pnpm-cli-v12.16.1-android-arm64-v8a.tar.gz",
+      "url": "https://github.com/fellow99/aosp-pnpm-cli/releases/download/v12.16.1/pnpm-cli-v12.16.1-android-arm64-v8a.tar.gz",
+      "sha256": "cbd6f3481362afec5626b6f43e3a11c0eafc2bc0ac3454193eb7d407dbf085b6",
+      "size": 22719556,
+      "strip": 1,
+      "jni": ["libpnpm_cli.so"],
+      "assets": [],
+      "licenses": ["LICENSE", "THIRD-PARTY-NOTICES.md", "Cargo.lock"]
+    }
+  }
+}

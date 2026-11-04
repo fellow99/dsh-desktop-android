@@ -4,7 +4,9 @@
  */
 
 import { defineTool } from '@deepseek-ai/dsh-tools'
-import { loadGit } from '../runtime.js'
+import { mkdirSync } from 'node:fs'
+import { runGit, GitExecutionError } from '../git-exec.js'
+import { openRepo } from '../toolkit.js'
 
 /**
  * Register the `git_init` tool.
@@ -54,25 +56,19 @@ export function applyGitInitTool(ctx, deps) {
       }],
     },
     async execute(args, exec) {
-      let policy
+      const { opened, mapError } = await openRepo(deps, 'git_init', args, exec)
       try {
-        const opened = await deps.fence.open('git_init', args, exec, args.dir)
-        policy = opened.policy
-        const { git } = await loadGit()
         const defaultBranch = args.defaultBranch ?? 'main'
-        await git.init({
-          fs: opened.fs,
-          dir: opened.root,
-          defaultBranch,
-          bare: args.bare === true,
-          signal: exec.signal,
-        })
+        mkdirSync(opened.root, { recursive: true })
+        const argv = ['init']
+        if (args.bare === true) argv.push('--bare')
+        argv.push('-b', defaultBranch)
+        const result = await runGit({ cwd: opened.root, args: argv, signal: exec.signal, timeoutMs: deps.config.networkTimeoutMs })
+        if (result.code !== 0) throw new GitExecutionError(opened.root, argv, result)
         return { root: opened.root, defaultBranch, bare: args.bare === true }
       } catch (error) {
         if (exec.signal.aborted) throw error
-        // `open` can refuse the repository root before a policy exists; asking the fence again is
-        // safe here because a denial proves this call carried no escalation fields.
-        throw deps.fence.mapError(error, policy ?? await deps.fence.resolvePolicy('git_init', args, exec))
+        throw await mapError(error)
       }
     },
   }))

@@ -151,6 +151,8 @@ object DshRuntime {
                 "DSH_ANDROID_FACTS" to if (BuildConfig.DEBUG) "1" else "0",
                 // S6 垫片：node-pty nativeLibraryDir（libpty_node.so 所在）
                 "DSH_ANDROID_NATIVE_LIB_DIR" to nativeLibDir,
+                // 112-cli-integration：CLI 数据资产（npm/corepack / python stdlib / git 模板+cacert）
+                "DSH_CLI_DATA_DIR" to File(install.dir, Constants.CLI_DATA_SUBDIR).absolutePath,
                 "TMPDIR" to File(filesDir, Constants.DIR_TMP).absolutePath,
             ),
         )

@@ -17,7 +17,7 @@ const { pathToFileURL } = require('node:url');
 const { createRequire } = require('node:module');
 
 async function start(ctx) {
-  const { runRoot, version, shims, probes, profileName, log, writeReady } = ctx;
+  const { runRoot, version, shims, probes, cliProbes = {}, profileName, log, writeReady } = ctx;
   const dshHome = process.env.DSH_HOME;
   const projectDir = path.join(runRoot, 'profiles', profileName || 'android');
   const userPatch = path.join(dshHome, 'user-patch.yml');
@@ -34,6 +34,7 @@ async function start(ctx) {
       diagnostic: `缺少上游包：${dshManifest}`,
       shims: shims.map((s) => s.marker),
       probes,
+      cli: cliProbes,
     });
     return;
   }
@@ -47,7 +48,7 @@ async function start(ctx) {
   } catch (error) {
     const message = error && error.stack ? error.stack : String(error);
     log(`host: resolve upstream failed: ${message}`);
-    writeReady({ phase: 'failed', diagnostic: `解析上游包失败：${message}`, shims: shims.map((s) => s.marker), probes });
+    writeReady({ phase: 'failed', diagnostic: `解析上游包失败：${message}`, shims: shims.map((s) => s.marker), probes, cli: cliProbes });
     return;
   }
 
@@ -70,7 +71,7 @@ async function start(ctx) {
     if (!Number.isInteger(port) || port <= 0) {
       const diagnostic = `webServer.port 非法：${String(port)}`;
       log(`host: ${diagnostic}`);
-      writeReady({ phase: 'failed', diagnostic, shims: shims.map((s) => s.marker), probes });
+      writeReady({ phase: 'failed', diagnostic, shims: shims.map((s) => s.marker), probes, cli: cliProbes });
       return;
     }
     const origin = `http://127.0.0.1:${String(port)}`;
@@ -79,7 +80,7 @@ async function start(ctx) {
     if (token === '') {
       const diagnostic = 'authenticatedUrl 未携带一次性 token';
       log(`host: ${diagnostic}`);
-      writeReady({ phase: 'failed', diagnostic, shims: shims.map((s) => s.marker), probes });
+      writeReady({ phase: 'failed', diagnostic, shims: shims.map((s) => s.marker), probes, cli: cliProbes });
       return;
     }
 
@@ -92,6 +93,7 @@ async function start(ctx) {
       sha12: version.sha12 || '',
       shims: shims.map((s) => s.marker),
       probes,
+      cli: cliProbes,
       roots: {
         payload: runRoot,
         dshHome,
@@ -105,16 +107,20 @@ async function start(ctx) {
   } catch (error) {
     const message = error && error.stack ? error.stack : String(error);
     log(`host: runProfile failed: ${message}`);
-    writeReady({ phase: 'failed', diagnostic: `启动 dsh Host 失败：${message}`, shims: shims.map((s) => s.marker), probes });
+    writeReady({ phase: 'failed', diagnostic: `启动 dsh Host 失败：${message}`, shims: shims.map((s) => s.marker), probes, cli: cliProbes });
   }
 }
 
 
-/** 012/201：pnpm 运行时前提（幂等；失败不影响 Host 启动）。storeDir 必须绝对路径。 */
+/** 012/201：pnpm 运行时前提（幂等；失败不影响 Host 启动）。storeDir 必须绝对路径。
+ * 112-cli-integration（US4）：引擎优先 $HOME/bin/pnpm（cli-env 已接 libpnpm_cli.so），
+ * 纯 JS pnpm（dsh-market-pnpm）仅作兜底路径保留判断。 */
 function configureMarketRuntime(options) {
   const { runRoot, profileDir, log } = options;
-  const engine = path.join(runRoot, 'node_modules', 'dsh-market-pnpm', 'bin', 'pnpm.cjs');
-  if (fs.existsSync(engine)) {
+  const farmEngine = process.env.DSH_PNPM_ENGINE;
+  const legacyEngine = path.join(runRoot, 'node_modules', 'dsh-market-pnpm', 'bin', 'pnpm.cjs');
+  const engine = farmEngine && fs.existsSync(farmEngine) ? farmEngine : legacyEngine;
+  if (engine && fs.existsSync(engine)) {
     process.env.DSH_PNPM_ENGINE = engine;
     log(`market: DSH_PNPM_ENGINE=${engine}`);
   } else {

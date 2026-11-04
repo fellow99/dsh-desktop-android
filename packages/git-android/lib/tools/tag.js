@@ -1,34 +1,26 @@
 /**
- * The model-facing `git_tag` tool: lightweight and annotated tags, listed, created, deleted.
+ * The model-facing `git_tag` tool: list, create or delete tags.
+ * 112：后端改为真实 `git tag`。
+ *
  * @module @dsh-android/git/tools/tag
  */
 
 import { defineTool } from '@deepseek-ai/dsh-tools'
-import { loadGit } from '../runtime.js'
+import { runGit, resolveRev } from '../git-exec.js'
+import { openRepo } from '../toolkit.js'
 import { renderTags } from '../report.js'
-import { resolveRevision } from './commit.js'
+import { resolveIdentity } from './commit.js'
 
-/** The tag actions this tool exposes. */
 const ACTIONS = ['list', 'create', 'delete']
 
-/**
- * Register the `git_tag` tool.
- * @param ctx - the plugin context; `ctx.tools` receives the registration.
- * @param deps - shared collaborators.
- * @param {import('../fence.js').GitRepositoryFence} deps.fence - the repository fence.
- * @param {object} deps.config - the resolved plugin config.
- */
 export function applyGitTagTool(ctx, deps) {
   ctx.tools.register(defineTool({
     name: 'git_tag',
     description: 'List, create or delete tags. `action: "list"` (the default) prints them all. `action: "create"` '
-      + 'creates `name` pointing at `object` (default "HEAD"; can be a commit id, branch or tag). With `message` it '
-      + 'is an annotated tag (a real object carrying tagger, date and text); without it, a lightweight ref. An '
-      + 'existing tag is only overwritten with `force: true`. `action: "delete"` removes the tag `name` locally — it '
-      + 'does not touch the remote (delete a remote tag by pushing it with `delete: true`). The tagger identity of '
-      + 'an annotated tag comes from `taggerName`/`taggerEmail`, else this repository\'s user.name/user.email, else '
-      + 'the plugin defaults. Fails when `name` is missing, the target cannot be resolved, or `dir` is not a '
-      + 'repository; a `dir` outside the session workspace is refused with an escalation hint.',
+      + 'creates `name` pointing at `object` (default "HEAD"). With `message` it is an annotated tag; without it, '
+      + 'a lightweight ref. An existing tag is only overwritten with `force: true`. `action: "delete"` removes the '
+      + 'tag `name` locally. Fails when `dir` is not a repository; a `dir` outside the session workspace is refused '
+      + 'with an escalation hint.',
     parameters: {
       dir: {
         type: 'string',
@@ -37,18 +29,12 @@ export function applyGitTagTool(ctx, deps) {
           + 'until a one-shot escalation is approved.',
       },
       action: { type: 'string', enum: ACTIONS, description: 'What to do. Defaults to "list".' },
-      name: { type: 'string', description: 'Tag name: the tag to create or delete.' },
+      name: { type: 'string', description: 'Tag name to create or delete.' },
       object: { type: 'string', description: 'For action "create": what the tag points at. Defaults to "HEAD".' },
-      message: {
-        type: 'string',
-        description: 'For action "create": the annotation text. Providing it makes the tag annotated.',
-      },
-      force: {
-        type: 'boolean',
-        description: 'For action "create": overwrite an existing tag of the same name. Defaults to false.',
-      },
-      taggerName: { type: 'string', description: 'For an annotated tag: the tagger name, overriding the config.' },
-      taggerEmail: { type: 'string', description: 'For an annotated tag: the tagger email, overriding the config.' },
+      message: { type: 'string', description: 'For action "create": annotation text; providing it makes the tag annotated.' },
+      force: { type: 'boolean', description: 'For action "create": overwrite an existing tag. Defaults to false.' },
+      taggerName: { type: 'string', description: 'For an annotated tag: tagger name.' },
+      taggerEmail: { type: 'string', description: 'For an annotated tag: tagger email.' },
       ...deps.fence.escalationFields(),
     },
     output: {
@@ -73,49 +59,41 @@ export function applyGitTagTool(ctx, deps) {
       }],
     },
     async execute(args, exec) {
-      let policy
+      const { opened, mapError } = await openRepo(deps, 'git_tag', args, exec)
       try {
-        const opened = await deps.fence.open('git_tag', args, exec, args.dir)
-        policy = opened.policy
-        const { git } = await loadGit()
-        const fs = opened.fs
-        const dir = opened.root
         const action = args.action ?? 'list'
-        if (!ACTIONS.includes(action)) {
-          throw new Error(`git_tag: unknown action "${action}" (expected one of ${ACTIONS.join(', ')})`)
-        }
+        if (!ACTIONS.includes(action)) throw new Error(`git_tag: unknown action "${action}"`)
         if (action !== 'list' && (args.name === undefined || args.name.trim() === '')) {
           throw new Error(`git_tag: action "${action}" requires name`)
         }
         if (action === 'create') {
-          const object = (await resolveRevision(git, fs, dir, args.object ?? 'HEAD')).ref
-          if (args.message === undefined) {
-            await git.tag({ fs, dir, ref: args.name, object, force: args.force === true, signal: exec.signal })
-          } else {
-            const name = await git.getConfig({ fs, dir, path: 'user.name' })
-            const email = await git.getConfig({ fs, dir, path: 'user.email' })
-            await git.annotatedTag({
-              fs,
-              dir,
-              ref: args.name,
-              object,
-              message: args.message,
-              force: args.force === true,
-              tagger: {
-                name: args.taggerName ?? (typeof name === 'string' && name !== '' ? name : deps.config.authorName),
-                email: args.taggerEmail ?? (typeof email === 'string' && email !== '' ? email : deps.config.authorEmail),
-              },
-              signal: exec.signal,
+          const target = await resolveRev(opened.root, args.object ?? 'HEAD')
+          const annotated = args.message !== undefined
+          if (annotated) {
+            const identity = await resolveIdentity(opened.root, deps.config, { authorName: args.taggerName, authorEmail: args.taggerEmail })
+            const argv = ['tag', '-a', args.name, '-m', String(args.message), target]
+            if (args.force === true) argv.splice(1, 0, '-f')
+            const r = await runGit({
+              cwd: opened.root, args: argv, signal: exec.signal, timeoutMs: deps.config.networkTimeoutMs,
+              env: { GIT_COMMITTER_NAME: identity.name, GIT_COMMITTER_EMAIL: identity.email },
             })
+            if (r.code !== 0) throw new Error(`@dsh-android/git: git tag -a failed (${r.stderr.trim()})`)
+          } else {
+            const argv = ['tag', args.name, target]
+            if (args.force === true) argv.splice(1, 0, '-f')
+            const r = await runGit({ cwd: opened.root, args: argv, signal: exec.signal })
+            if (r.code !== 0) throw new Error(`@dsh-android/git: git tag failed (${r.stderr.trim()})`)
           }
         } else if (action === 'delete') {
-          await git.deleteTag({ fs, dir, ref: args.name, signal: exec.signal })
+          const r = await runGit({ cwd: opened.root, args: ['tag', '-d', args.name], signal: exec.signal })
+          if (r.code !== 0) throw new Error(`@dsh-android/git: git tag -d failed (${r.stderr.trim()})`)
         }
-        const tags = await git.listTags({ fs, dir, signal: exec.signal })
-        return { root: dir, action, name: args.name ?? '', annotated: args.message !== undefined, tags }
+        const list = await runGit({ cwd: opened.root, args: ['tag', '--list'], signal: exec.signal })
+        const tags = list.code === 0 ? list.stdout.split('\n').map((s) => s.trim()).filter(Boolean) : []
+        return { root: opened.root, action, name: args.name ?? '', annotated: args.message !== undefined, tags }
       } catch (error) {
         if (exec.signal.aborted) throw error
-        throw deps.fence.mapError(error, policy ?? await deps.fence.resolvePolicy('git_tag', args, exec))
+        throw await mapError(error)
       }
     },
   }))

@@ -41,4 +41,7 @@ object Constants {
     const val ASSET_VERSION = "dsh-payload/dsh.version"
     const val READY_FILE = "ready.json"
     const val MARKER_PREFIX = ".ready-"
+
+    // 112-cli-integration：CLI 数据资产在运行树中的相对路径（npm/corepack / python stdlib / git 模板）
+    const val CLI_DATA_SUBDIR = "dsh/cli-data"
 }

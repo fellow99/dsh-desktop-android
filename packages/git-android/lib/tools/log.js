@@ -1,34 +1,24 @@
 /**
  * The model-facing `git_log` tool: walk commit history.
- *
- * One limitation is worth naming: isomorphic-git's `log` follows **one** file path per call
- * (`filepath`, with `follow` for renames), so this tool takes a single `path` instead of a
- * pathspec list. Passing several paths would silently mean something else, which is exactly
- * what this plugin refuses to do.
+ * 112：后端改为真实 `git log`，天然支持缩写 oid / `HEAD~1` 祖先语法（isomorphic-git 不支持的能力）。
  *
  * @module @dsh-android/git/tools/log
  */
 
 import { defineTool } from '@deepseek-ai/dsh-tools'
-import { loadGit } from '../runtime.js'
+import { runGit, resolveRev } from '../git-exec.js'
+import { openRepo, parseLogRecords } from '../toolkit.js'
 import { renderLog } from '../report.js'
-import { resolveRevision } from './commit.js'
 
-/**
- * Register the `git_log` tool.
- * @param ctx - the plugin context; `ctx.tools` receives the registration.
- * @param deps - shared collaborators.
- * @param {import('../fence.js').GitRepositoryFence} deps.fence - the repository fence.
- */
 export function applyGitLogTool(ctx, deps) {
   ctx.tools.register(defineTool({
     name: 'git_log',
     description: 'List commit history, newest first, with each commit\'s short id, author, date, parent count and '
-      + 'subject. `ref` chooses where to start (a branch, tag, commit id, or "HEAD"). `depth` limits how many '
-      + 'commits are returned; omit it for the full history. `path` follows the history of one file; `follow: true` '
-      + 'keeps listing across renames. A repository with no commit yet is reported as such. Fails when `ref` cannot '
-      + 'be resolved or `dir` is not a repository; a `dir` outside the session workspace is refused with an '
-      + 'escalation hint.',
+      + 'subject. `ref` chooses where to start (a branch, tag, commit id, or "HEAD"); abbreviated ids and ancestry '
+      + 'syntax such as "HEAD~1" work. `depth` limits how many commits are returned; omit it for the full history. '
+      + '`path` follows the history of one file; `follow: true` keeps listing across renames. A repository with no '
+      + 'commit yet is reported as such. Fails when `ref` cannot be resolved or `dir` is not a repository; a `dir` '
+      + 'outside the session workspace is refused with an escalation hint.',
     parameters: {
       dir: {
         type: 'string',
@@ -36,24 +26,10 @@ export function applyGitLogTool(ctx, deps) {
         description: 'Repository root. Resolved against the session workspace; outside it the call is refused '
           + 'until a one-shot escalation is approved.',
       },
-      ref: {
-        type: 'string',
-        description: 'Commit, branch or tag to start from; a full or abbreviated object id also works. Defaults to '
-          + '"HEAD".',
-      },
-      depth: {
-        type: 'number',
-        description: 'Maximum number of commits to return. Omit for the complete history.',
-      },
-      path: {
-        type: 'string',
-        description: 'Repository-relative file path whose history to follow. Only one path is supported by the '
-          + 'underlying git implementation; omit to walk the whole history.',
-      },
-      follow: {
-        type: 'boolean',
-        description: 'With `path`: keep following the file across renames. Defaults to false.',
-      },
+      ref: { type: 'string', description: 'Commit, branch or tag to start from; full or abbreviated oid works. Defaults to "HEAD".' },
+      depth: { type: 'number', description: 'Maximum number of commits to return. Omit for the complete history.' },
+      path: { type: 'string', description: 'Repository-relative file path whose history to follow.' },
+      follow: { type: 'boolean', description: 'With `path`: keep following the file across renames. Defaults to false.' },
       ...deps.fence.escalationFields(),
     },
     output: {
@@ -67,32 +43,25 @@ export function applyGitLogTool(ctx, deps) {
           commits: { type: 'json', required: true },
         },
       },
-      render: (_args, value) => [{
-        type: 'text',
-        text: renderLog(value.commits, { ref: value.ref, root: value.root }),
-      }],
+      render: (_args, value) => [{ type: 'text', text: renderLog(value.commits, { ref: value.ref, root: value.root }) }],
     },
     async execute(args, exec) {
-      let policy
+      const { opened, mapError } = await openRepo(deps, 'git_log', args, exec)
       try {
-        const opened = await deps.fence.open('git_log', args, exec, args.dir)
-        policy = opened.policy
-        const { git } = await loadGit()
         const requested = args.ref ?? 'HEAD'
-        const { ref } = await resolveRevision(git, opened.fs, opened.root, requested)
-        const commits = await git.log({
-          fs: opened.fs,
-          dir: opened.root,
-          ref,
-          ...args.depth === undefined ? {} : { depth: args.depth },
-          ...args.path === undefined ? {} : { filepath: args.path },
-          follow: args.follow === true,
+        const ref = await resolveRev(opened.root, requested)
+        const logRun = await runGit({
+          cwd: opened.root,
+          args: ['log', '--pretty=raw', ...(args.depth !== undefined ? ['-n', String(args.depth)] : []), ...(args.path !== undefined ? ['--', args.path] : [])],
           signal: exec.signal,
+          timeoutMs: deps.config.networkTimeoutMs,
         })
+        if (logRun.code !== 0) throw new Error(`@dsh-android/git: git log failed (${logRun.stderr.trim()})`)
+        const commits = parseLogRecords(logRun.stdout)
         return { root: opened.root, ref, count: commits.length, commits }
       } catch (error) {
         if (exec.signal.aborted) throw error
-        throw deps.fence.mapError(error, policy ?? await deps.fence.resolvePolicy('git_log', args, exec))
+        throw await mapError(error)
       }
     },
   }))

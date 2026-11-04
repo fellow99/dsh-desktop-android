@@ -1,26 +1,18 @@
 /**
  * The model-facing `git_add` tool: move work in and out of the index.
- *
- * `git.add` skips ignored files without saying so, so this tool reports every requested path
- * that the `.gitignore` rules kept out, together with the `force: true` remedy — a silent
- * skip would look like a successful stage.
+ * 112：后端改为真实 `git`（add/rm/reset/check-ignore + status），表层契约不变。
  *
  * @module @dsh-android/git/tools/add
  */
 
 import { defineTool } from '@deepseek-ai/dsh-tools'
-import { loadGit } from '../runtime.js'
-import { renderPathList, renderStatus } from '../report.js'
+import { runGit, currentBranch, headOid } from '../git-exec.js'
+import { openRepo, parseStatusZ } from '../toolkit.js'
+import { renderPathList } from '../report.js'
 
 /** The index actions this tool exposes. */
 const ACTIONS = ['add', 'remove', 'unstage', 'ignored']
 
-/**
- * Register the `git_add` tool.
- * @param ctx - the plugin context; `ctx.tools` receives the registration.
- * @param deps - shared collaborators.
- * @param {import('../fence.js').GitRepositoryFence} deps.fence - the repository fence.
- */
 export function applyGitAddTool(ctx, deps) {
   ctx.tools.register(defineTool({
     name: 'git_add',
@@ -29,9 +21,8 @@ export function applyGitAddTool(ctx, deps) {
       + 'for a file that is already gone from the working tree; `action: "unstage"` resets an index entry to HEAD, '
       + 'which unstages a newly added file as well; `action: "ignored"` writes nothing and only reports whether '
       + 'each path is matched by .gitignore. Ignored paths are reported instead of staged unless `force: true`. '
-      + 'The report shows the resulting index state for the requested paths, so a path that changed nothing reads '
-      + 'as such instead of looking staged. Fails for a path that leaves the repository; a `dir` outside the '
-      + 'session workspace is refused with an escalation hint.',
+      + 'The report shows the resulting index state for the requested paths. Fails for a path that leaves the '
+      + 'repository; a `dir` outside the session workspace is refused with an escalation hint.',
     parameters: {
       dir: {
         type: 'string',
@@ -39,21 +30,9 @@ export function applyGitAddTool(ctx, deps) {
         description: 'Repository root. Resolved against the session workspace; outside it the call is refused '
           + 'until a one-shot escalation is approved.',
       },
-      action: {
-        type: 'string',
-        enum: ACTIONS,
-        description: 'What to do with the index. Defaults to "add".',
-      },
-      paths: {
-        type: 'array',
-        items: { type: 'string' },
-        required: true,
-        description: 'Repository-relative paths (files or directories) to operate on.',
-      },
-      force: {
-        type: 'boolean',
-        description: 'With action "add": stage the paths even when .gitignore matches them. Defaults to false.',
-      },
+      action: { type: 'string', enum: ACTIONS, description: 'What to do with the index. Defaults to "add".' },
+      paths: { type: 'array', items: { type: 'string' }, required: true, description: 'Repository-relative paths to operate on.' },
+      force: { type: 'boolean', description: 'With action "add": stage even when .gitignore matches. Defaults to false.' },
       ...deps.fence.escalationFields(),
     },
     output: {
@@ -80,21 +59,13 @@ export function applyGitAddTool(ctx, deps) {
           : `Index updated for ${value.paths.length} requested path(s).`
         return [{
           type: 'text',
-          text: `${what}${ignored}\n\nIndex state now:\n${renderStatus(value.rows, {
-            root: value.root,
-            branch: value.branch === '' ? undefined : value.branch,
-            head: value.head,
-            conflicts: [],
-          })}`,
+          text: `${what}${ignored}\n\nIndex state now:\n${value.rows.map((e) => `  ${e.code === '  ' ? '  ' : e.code} ${e.path}`).join('\n') || '  (no changes)'}`,
         }]
       },
     },
     async execute(args, exec) {
-      let policy
+      const { opened, mapError } = await openRepo(deps, 'git_add', args, exec)
       try {
-        const opened = await deps.fence.open('git_add', args, exec, args.dir)
-        policy = opened.policy
-        const { git } = await loadGit()
         const action = args.action ?? 'add'
         if (!ACTIONS.includes(action)) {
           throw new Error(`git_add: unknown action "${action}" (expected one of ${ACTIONS.join(', ')})`)
@@ -107,57 +78,35 @@ export function applyGitAddTool(ctx, deps) {
 
         const ignored = []
         for (const path of paths) {
-          if (await git.isIgnored({ fs: opened.fs, dir: opened.root, filepath: path })) ignored.push(path)
+          const check = await runGit({ cwd: opened.root, args: ['check-ignore', '--quiet', path] })
+          if (check.code === 0) ignored.push(path)
         }
 
         if (action === 'add') {
-          await git.add({
-            fs: opened.fs,
-            dir: opened.root,
-            filepath: paths,
-            force: args.force === true,
-            signal: exec.signal,
-          })
+          if (ignored.length > 0 && args.force !== true) {
+            throw new Error('git_add: the requested path(s) are ignored by .gitignore and were not staged '
+              + `(${ignored.join(', ')}). Retry with force: true to stage them anyway.`)
+          }
+          const r = await runGit({ cwd: opened.root, args: ['add', ...paths], signal: exec.signal, timeoutMs: deps.config.networkTimeoutMs })
+          if (r.code !== 0) throw new Error(`@dsh-android/git: git add failed (${r.stderr.trim()})`)
         } else if (action === 'remove') {
-          await git.remove({ fs: opened.fs, dir: opened.root, filepath: paths, signal: exec.signal })
+          const r = await runGit({ cwd: opened.root, args: ['rm', '--cached', '--', ...paths], signal: exec.signal, timeoutMs: deps.config.networkTimeoutMs })
+          if (r.code !== 0) throw new Error(`@dsh-android/git: git rm failed (${r.stderr.trim()})`)
         } else if (action === 'unstage') {
-          // No explicit `ref`: that is what makes an unborn branch (a repository without a first
-          // commit) behave as "drop the index entry" instead of failing to resolve HEAD.
           for (const path of paths) {
-            await git.resetIndex({ fs: opened.fs, dir: opened.root, filepath: path, signal: exec.signal })
+            const r = await runGit({ cwd: opened.root, args: ['reset', 'HEAD', '--', path], signal: exec.signal, timeoutMs: deps.config.networkTimeoutMs })
+            if (r.code !== 0) throw new Error(`@dsh-android/git: git reset failed for ${path} (${r.stderr.trim()})`)
           }
         }
 
-        const rows = await git.statusMatrix({
-          fs: opened.fs,
-          dir: opened.root,
-          filepaths: paths,
-          signal: exec.signal,
-        })
-        // Read after the change, so the report's header describes the same state the rows do — the
-        // render calls `renderStatus`, which otherwise has no branch to name and prints "On detached
-        // HEAD" even on a branch (the same call shape `git_reset` already uses).
-        let branch = ''
-        try {
-          branch = (await git.currentBranch({
-            fs: opened.fs,
-            dir: opened.root,
-            fullname: false,
-            signal: exec.signal,
-          })) ?? ''
-        } catch {
-          branch = ''
-        }
-        let head = ''
-        try {
-          head = await git.resolveRef({ fs: opened.fs, dir: opened.root, ref: 'HEAD' })
-        } catch {
-          head = ''
-        }
-        return { root: opened.root, action, paths, ignored, rows, branch, head }
+        const status = await runGit({ cwd: opened.root, args: ['status', '--porcelain=v1', '-z', '--', ...paths], signal: exec.signal })
+        const rows = status.code === 0 ? parseStatusZ(status.stdout) : []
+        const branch = await currentBranch(opened.root)
+        const head = await headOid(opened.root)
+        return { root: opened.root, action, paths, ignored, rows, branch: branch ?? '', head: head ?? '' }
       } catch (error) {
         if (exec.signal.aborted) throw error
-        throw deps.fence.mapError(error, policy ?? await deps.fence.resolvePolicy('git_add', args, exec))
+        throw await mapError(error)
       }
     },
   }))

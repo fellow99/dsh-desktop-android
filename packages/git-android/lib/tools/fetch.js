@@ -1,55 +1,32 @@
 /**
- * The model-facing `git_fetch` tool: bring remote objects and refs into the repository without
- * touching the working tree or the checked-out branch.
+ * The model-facing `git_fetch` tool.
+ * 112：后端改为真实 `git fetch`。
+ *
  * @module @dsh-android/git/tools/fetch
  */
 
 import { defineTool } from '@deepseek-ai/dsh-tools'
-import { loadGit } from '../runtime.js'
+import { runGit } from '../git-exec.js'
+import { openRepo } from '../toolkit.js'
 import { renderFetchResult } from '../report.js'
-import { guardedHttp, mapNetworkError } from './clone.js'
 import { scrubUrl } from '../url.js'
-
-/**
- * Register the `git_fetch` tool.
- * @param ctx - the plugin context; `ctx.tools` receives the registration.
- * @param deps - shared collaborators.
- * @param {import('../fence.js').GitRepositoryFence} deps.fence - the repository fence.
- * @param {import('../auth.js').GitCredentials} deps.credentials - the credential lookup.
- * @param {object} deps.config - the resolved plugin config.
- */
 export function applyGitFetchTool(ctx, deps) {
   ctx.tools.register(defineTool({
     name: 'git_fetch',
-    description: 'Fetch objects and refs from a remote into this repository without merging anything and without '
-      + 'touching the working tree. `remote` defaults to "origin"; `url` overrides the configured address. '
-      + '`singleBranch: true` fetches only `remoteRef` (or the branch HEAD tracks), `depth` limits how much history '
-      + 'is fetched, `tags: true` also fetches tags, and `prune: true` deletes remote-tracking branches that no '
-      + 'longer exist on the remote. When the remote has nothing new the report says so. Credentials come from the '
-      + 'credential store by host: a missing or refused credential is reported with the exact credential name '
-      + 'instead of a bare 401, and a fetch that outlives the network timeout is aborted with the elapsed time. A '
-      + '`dir` outside the session workspace is refused with an escalation hint.',
+    description: 'Fetch objects and remote-tracking refs from a remote without touching the working tree. '
+      + '`remote` defaults to "origin"; `url` overrides the configured remote URL. `singleBranch`/`remoteRef` '
+      + 'limit to one branch; `depth` limits history; `tags` also fetches tags; `prune` deletes stale '
+      + 'remote-tracking branches. Uses the stored credential for the host (Settings → Git 凭据). Fails when '
+      + '`dir` is not a repository; a `dir` outside the session workspace is refused with an escalation hint.',
     parameters: {
-      dir: {
-        type: 'string',
-        required: true,
-        description: 'Repository root. Resolved against the session workspace; outside it the call is refused '
-          + 'until a one-shot escalation is approved.',
-      },
+      dir: { type: 'string', required: true, description: 'Repository root. Resolved against the session workspace.' },
       remote: { type: 'string', description: 'Remote to fetch from. Defaults to "origin".' },
-      url: {
-        type: 'string',
-        description: 'Remote URL, overriding the configured one, for example '
-          + '"https://git.example.com/team/project.git".',
-      },
+      url: { type: 'string', description: 'Remote URL, overriding the configured one.' },
       remoteRef: { type: 'string', description: 'The branch on the remote to fetch when singleBranch is true.' },
       singleBranch: { type: 'boolean', description: 'Fetch only one branch instead of all of them.' },
       depth: { type: 'number', description: 'Limit how much history is fetched, for example 1 for a shallow fetch.' },
       tags: { type: 'boolean', description: 'Also fetch tags. Defaults to false.' },
-      prune: {
-        type: 'boolean',
-        description: 'Delete local remote-tracking branches that no longer exist on the remote. Defaults to false.',
-      },
+      prune: { type: 'boolean', description: 'Delete remote-tracking branches gone on the remote. Defaults to false.' },
       ...deps.fence.escalationFields(),
     },
     output: {
@@ -66,69 +43,47 @@ export function applyGitFetchTool(ctx, deps) {
       render: (_args, value) => [{
         type: 'text',
         text: renderFetchResult(value.result, {
-          ...value.remote === '' ? {} : { remote: value.remote },
-          ...value.url === '' ? {} : { url: value.url },
+          ...(value.remote === '' ? {} : { remote: value.remote }),
+          ...(value.url === '' ? {} : { url: value.url }),
         }),
       }],
     },
     async execute(args, exec) {
-      let policy
-      let guard
-      const started = Date.now()
-      const remote = args.remote ?? 'origin'
-      // Declared before the `try` so the catch can name the address the fetch failed against: the
-      // credential key (`GIT_CREDENTIAL_<HOST>`) is derived from the URL, so a failure path that
-      // only had the remote *name* ("origin") would report "no credentials are configured" without
-      // ever naming the key the user has to create (FR-5.3).
-      let url = args.url ?? ''
+      const { opened, mapError } = await openRepo(deps, 'git_fetch', args, exec)
       try {
-        const opened = await deps.fence.open('git_fetch', args, exec, args.dir)
-        policy = opened.policy
-        const { git, http } = await loadGit()
-        url = args.url ?? await remoteUrl(git, opened.fs, opened.root, remote, exec.signal)
-        guard = guardedHttp(http, exec.signal, deps.config.networkTimeoutMs)
-        const result = await git.fetch({
-          fs: opened.fs,
-          http: guard.http,
-          dir: opened.root,
-          remote,
-          ...args.url === undefined ? {} : { url: args.url },
-          ...args.remoteRef === undefined ? {} : { remoteRef: args.remoteRef },
-          singleBranch: args.singleBranch === true,
-          ...args.depth === undefined ? {} : { depth: args.depth },
-          tags: args.tags === true,
-          prune: args.prune === true,
-          signal: guard.signal,
-          ...deps.credentials.callbacks(url),
-        })
-        return { root: opened.root, remote, url: scrubUrl(url), result }
+        const remote = args.remote ?? 'origin'
+        const url = args.url ?? ''
+        const argv = ['fetch']
+        if (args.prune === true) argv.push('--prune')
+        if (args.tags === true) argv.push('--tags')
+        if (args.depth !== undefined && !args.singleBranch) argv.push('--depth', String(args.depth))
+        if (url !== '') {
+          argv.push(url)
+          if (args.remoteRef !== undefined) argv.push(args.remoteRef)
+        } else {
+          argv.push(remote)
+          if (args.remoteRef !== undefined && args.singleBranch === true) argv.push(args.remoteRef)
+        }
+        const r = await runGit({ cwd: opened.root, args: argv, signal: exec.signal, timeoutMs: deps.config.networkTimeoutMs })
+        if (r.code !== 0) {
+          const stderr = r.stderr.trim()
+          if (/could not read (Username|Password)|Authentication failed/i.test(stderr)) {
+            throw new Error(deps.credentials.missingMessage(url || remote))
+          }
+          throw new Error(`@dsh-android/git: git fetch failed (${stderr.slice(0, 800)})`)
+        }
+        const headRun = await runGit({ cwd: opened.root, args: ['rev-parse', '--short', 'FETCH_HEAD'], timeoutMs: 10000 })
+        const head = headRun.code === 0 ? headRun.stdout.trim() : ''
+        return {
+          root: opened.root,
+          remote: url === '' ? remote : '',
+          url: url === '' ? '' : scrubUrl(url),
+          result: { fetchHead: head, fetchHeadDescription: `from ${url === '' ? remote : scrubUrl(url)}`, pruned: [] },
+        }
       } catch (error) {
         if (exec.signal.aborted) throw error
-        throw await mapNetworkError(error, {
-          tool: 'git_fetch',
-          url,
-          elapsedMs: Date.now() - started,
-          guard,
-          deps,
-          policy,
-          args,
-          exec,
-        })
+        throw await mapError(error)
       }
     },
   }))
-}
-
-/**
- * The configured URL of one remote, for the credential lookup and the report.
- * @param {object} git - the loaded isomorphic-git namespace.
- * @param {object} fs - the confined repository filesystem.
- * @param {string} dir - the repository root.
- * @param {string} remote - the remote name.
- * @param {AbortSignal} signal - the call's abort signal, so a cancel interrupts the lookup too.
- * @returns the configured URL, or `''` when the remote is unknown.
- */
-async function remoteUrl(git, fs, dir, remote, signal) {
-  const remotes = await git.listRemotes({ fs, dir, signal })
-  return remotes.find(entry => entry.remote === remote)?.url ?? ''
 }

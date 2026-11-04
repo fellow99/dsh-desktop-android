@@ -12,9 +12,9 @@
  */
 
 import { defineTool } from '@deepseek-ai/dsh-tools'
-import { loadGit } from '../runtime.js'
-import { resolveWithin } from '../fs-adapter.js'
-import { classifyStatusRow, renderStatus } from '../report.js'
+import { promises as nodeFs } from 'node:fs'
+import { runGit, currentBranch, headOid } from '../git-exec.js'
+import { openRepo, parseStatusZ } from '../toolkit.js'
 
 /**
  * Whether a working-tree file still holds a complete git conflict marker set.
@@ -42,20 +42,58 @@ function hasConflictMarkers(text) {
  * @param {number} maxBytes - the per-file scan cap.
  * @returns the paths whose working-tree copy holds conflict markers.
  */
-async function scanForConflicts(fs, root, rows, maxBytes) {
+async function scanForConflicts(root, rows, maxBytes) {
   const found = []
-  for (const [path, , workdir] of rows) {
-    if (workdir !== 2) continue
-    const absolute = resolveWithin(root, path)
+  for (const entry of rows) {
+    if (!entry.modified && !entry.untracked) continue
+    const absolute = `${root}/${entry.path.split(' -> ')[0]}`
     try {
-      const stat = await fs.promises.stat(absolute)
+      const stat = await nodeFs.stat(absolute)
       if (stat.size > maxBytes) continue
-      if (hasConflictMarkers(await fs.promises.readFile(absolute, 'utf8'))) found.push(path)
+      if (hasConflictMarkers(await nodeFs.readFile(absolute, 'utf8'))) found.push(entry.path)
     } catch {
-      // A file that vanished mid-scan is reported by the matrix, not here.
+      // A file that vanished mid-scan is reported by the status matrix, not here.
     }
   }
   return found
+}
+
+/** 渲染真实 git porcelain 解析出的变更条目（保持既有措辞；112 后端替换后数据形态）。 */
+function renderStatusEntries(rows, options = {}) {
+  const conflicting = new Set(options.conflicts ?? [])
+  const lines = []
+  if (options.root !== undefined) lines.push(`Repository: ${options.root}`)
+  const head = options.head === undefined || options.head === '' ? undefined : options.head.slice(0, 10)
+  const branch = options.branch === undefined || options.branch === ''
+    ? `detached HEAD${head === undefined ? '' : ` at ${head}`}`
+    : `branch ${options.branch}${head === undefined ? '' : ` (HEAD ${head})`}`
+  lines.push(`On ${branch}`)
+  const groups = [
+    ['Staged for commit', rows.filter((e) => e.staged)],
+    ['Modified in the working tree, not staged', rows.filter((e) => !e.staged && e.modified && !e.untracked)],
+    ['Deleted', rows.filter((e) => !e.staged && e.deleted)],
+    ['Untracked', rows.filter((e) => e.untracked)],
+  ]
+  const conflicted = rows.filter((e) => conflicting.has(e.path))
+  const changed = rows.filter((e) => e.changed)
+  if (changed.length === 0 && conflicted.length === 0) {
+    lines.push('')
+    lines.push('No changes: HEAD, the index and the working tree all agree.')
+    return lines.join('\n')
+  }
+  for (const [title, group] of groups) {
+    if (group.length === 0) continue
+    lines.push('')
+    lines.push(`${title} (${group.length}):`)
+    for (const e of group) lines.push(`  ${e.code === '  ' ? '  ' : e.code} ${e.path}${conflicting.has(e.path) ? ' (conflicted)' : ''}`)
+  }
+  if (conflicted.length > 0) {
+    lines.push('')
+    lines.push(`Conflicted (${conflicted.length}) — resolve these before committing; the working tree `
+      + 'still holds the merge conflict markers:')
+    for (const e of conflicted) lines.push(`  ${e.code === '  ' ? '  ' : e.code} ${e.path}`)
+  }
+  return lines.join('\n')
 }
 
 /**
@@ -108,7 +146,7 @@ export function applyGitStatusTool(ctx, deps) {
         type: 'text',
         text: `${Array.isArray(args.paths) && args.paths.length > 0
           ? `Scope: ${args.paths.join(', ')}\n`
-          : ''}${renderStatus(value.rows, {
+          : ''}${renderStatusEntries(value.rows, {
           root: value.root,
           branch: value.branch === '' ? undefined : value.branch,
           head: value.head === '' ? undefined : value.head,
@@ -117,48 +155,32 @@ export function applyGitStatusTool(ctx, deps) {
       }],
     },
     async execute(args, exec) {
-      let policy
+      const { opened, mapError } = await openRepo(deps, 'git_status', args, exec)
       try {
-        const opened = await deps.fence.open('git_status', args, exec, args.dir)
-        policy = opened.policy
-        const { git } = await loadGit()
         const filepaths = Array.isArray(args.paths) && args.paths.length > 0 ? args.paths : ['.']
-        const rows = await git.statusMatrix({
-          fs: opened.fs,
-          dir: opened.root,
-          filepaths,
+        const statusRun = await runGit({
+          cwd: opened.root,
+          args: ['status', '--porcelain=v1', '-z', '--', ...filepaths],
           signal: exec.signal,
+          timeoutMs: deps.config.networkTimeoutMs,
         })
-        let branch
-        try {
-          branch = await git.currentBranch({ fs: opened.fs, dir: opened.root, fullname: false })
-        } catch {
-          // A detached HEAD is reported as such rather than failing the whole status.
-          branch = undefined
-        }
-        let head = ''
-        try {
-          head = await git.resolveRef({ fs: opened.fs, dir: opened.root, ref: 'HEAD' })
-        } catch {
-          // An unborn branch (a fresh repository) has no commit yet.
-          head = ''
-        }
-        const conflicts = await scanForConflicts(opened.fs, opened.root, rows, deps.config.maxDiffBlobBytes)
-        // The matrix carries a row per walked path, clean ones included, so count the rows that
-        // actually differ rather than the rows themselves.
-        const changeCount = rows.map(classifyStatusRow).filter(entry => entry.changed).length
+        if (statusRun.code !== 0) throw new Error(`@dsh-android/git: git status failed (${statusRun.stderr.trim()})`)
+        const rows = parseStatusZ(statusRun.stdout)
+        const branch = await currentBranch(opened.root)
+        const head = await headOid(opened.root)
+        const conflicts = await scanForConflicts(opened.root, rows, deps.config.maxDiffBlobBytes)
         return {
           root: opened.root,
           branch: branch ?? '',
-          head,
-          clean: changeCount === 0,
-          count: changeCount,
+          head: head ?? '',
+          clean: rows.filter((entry) => entry.changed).length === 0 && conflicts.length === 0,
+          count: rows.filter((entry) => entry.changed).length,
           conflicts,
           rows,
         }
       } catch (error) {
         if (exec.signal.aborted) throw error
-        throw deps.fence.mapError(error, policy ?? await deps.fence.resolvePolicy('git_status', args, exec))
+        throw await mapError(error)
       }
     },
   }))
