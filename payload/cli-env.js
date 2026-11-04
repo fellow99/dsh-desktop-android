@@ -25,11 +25,15 @@ function farmEntries(nldir, cliData) {
     { name: 'corepack', target: p('libcorepack.so'), probe: ['--version'], needsNodeTools: true },
     { name: 'python', target: p('libpython_cli.so'), probe: ['-V'] },
     { name: 'python3', target: p('libpython_cli.so'), probe: [] },
+    // pip/pip3 包装脚本按 `dirname $0` 找 libpython_cli.so ⇒ 农场需同名软链
+    { name: 'libpython_cli.so', target: p('libpython_cli.so'), probe: [] },
     { name: 'pip', target: p('libpip.so'), probe: ['--version'] },
     { name: 'pip3', target: p('libpip3.so'), probe: ['--version'] },
     { name: 'uv', target: p('libuv_cli.so'), probe: ['--version'] },
     { name: 'pnpm', target: p('libpnpm_cli.so'), probe: ['--version'] },
     { name: 'git', target: p('libgit_cli.so'), probe: ['--version'] },
+    // npm/npx 包装脚本经 NODE_NATIVE_DIR 定位 libnode_cli.so；农场同名软链作双保险
+    { name: 'libnode_cli.so', target: p('libnode_cli.so'), probe: [] },
     // git remote helper（git 按 exec-path/PATH 查子程序名）
     { name: 'git-http-fetch', target: p('libgit_http_fetch.so'), probe: [] },
     { name: 'git-remote-https', target: p('libgit_remote_curl.so'), probe: [] },
@@ -62,10 +66,30 @@ function install(log) {
   try {
     fs.mkdirSync(homeBin, { recursive: true });
     let created = 0;
+    let replaced = 0;
     for (const entry of farmEntries(nldir, cliData)) {
       const link = path.join(homeBin, entry.name);
       try {
-        if (fs.existsSync(link)) continue;
+        // 重装/升级后 nativeLibraryDir 路径会变（APK 目录哈希变化），旧软链会悬空。
+        // 用 lstatSync（不跟随）+ readlinkSync（读链接本体的目标串）做比对：悬空链接也能被识别并重建。
+        let needsCreate = true;
+        try {
+          const st = fs.lstatSync(link);
+          if (st.isSymbolicLink()) {
+            if (fs.readlinkSync(link) === entry.target) {
+              needsCreate = false;
+            } else {
+              fs.rmSync(link, { force: true });
+              replaced++;
+            }
+          } else {
+            fs.rmSync(link, { force: true });
+            replaced++;
+          }
+        } catch {
+          // 不存在 → 需要创建
+        }
+        if (!needsCreate) continue;
         fs.symlinkSync(entry.target, link);
         created++;
       } catch (error) {
@@ -73,9 +97,9 @@ function install(log) {
       }
     }
     if (!fs.existsSync(marker)) {
-      try { fs.writeFileSync(marker, JSON.stringify({ at: new Date().toISOString(), created })); } catch (_) { /* ignore */ }
+      try { fs.writeFileSync(marker, JSON.stringify({ at: new Date().toISOString(), created, replaced })); } catch (_) { /* ignore */ }
     }
-    log(`cli-env: $HOME/bin 农场就绪（创建 ${created} 条链接）`);
+    log(`cli-env: $HOME/bin 农场就绪（创建 ${created} 条 / 重建 ${replaced} 条链接）`);
   } catch (error) {
     log(`cli-env: 农场建立失败：${error.message}`);
   }
@@ -87,6 +111,9 @@ function install(log) {
     process.env.PATH = [...prepend, ...currentPath.split(path.delimiter).filter(Boolean)].join(path.delimiter);
   }
   process.env.LD_LIBRARY_PATH = nldir;
+  // 112：npm/npx/corepack 壳脚本经 NODE_NATIVE_DIR 定位 libnode_cli.so（农场符号链接场景下
+  // dirname $0 指向 $HOME/bin 而非 nativeLibraryDir，必须显式注入）。
+  process.env.NODE_NATIVE_DIR = nldir;
   if (cliData) {
     const nodeTools = path.join(cliData, 'node', 'node-bridge-tools');
     const pythonLib = path.join(cliData, 'python', 'stdlib-assets', 'lib');

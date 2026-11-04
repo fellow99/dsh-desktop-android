@@ -22,7 +22,9 @@ import { fileURLToPath } from 'node:url';
 const ROOT = resolve(fileURLToPath(new URL('..', import.meta.url)));
 const LOCK = JSON.parse(readFileSync(join(ROOT, 'scripts/cli.lock.json'), 'utf8'));
 const JNI_OUT = join(ROOT, 'app/src/main/jniLibs/arm64-v8a');
-const ASSETS_OUT = join(ROOT, 'app/src/main/assets/cli');
+// 112：CLI 数据资产放构建目录 build/cli-assets（assemble-payload 拷贝进载荷 dsh/cli-data；
+// 不落 APK assets，避免与载荷二次物化重复占体积，也避免 src/main/assets/cli 被 AAPT 收编）。
+const ASSETS_OUT = join(ROOT, 'build/cli-assets');
 const WORK = join(ROOT, 'build/.cli-provision');
 const CACHE = join(ROOT, 'build/.cli-cache');
 

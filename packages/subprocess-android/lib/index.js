@@ -64,7 +64,7 @@ export const SENSITIVE_ENV_PATTERN = /KEY|PASSWORD|SECRET|TOKEN/i
  * 否则 git 插件、python、npm 的子进程拿不到引导层注入的必要环境。 */
 export const ENV_ALLOWLIST = Object.freeze([
   'PATH', 'HOME', 'TMPDIR', 'LANG',
-  'LD_LIBRARY_PATH', 'NODE_TOOLS_DIR', 'SSL_CERT_FILE',
+  'LD_LIBRARY_PATH', 'NODE_TOOLS_DIR', 'NODE_NATIVE_DIR', 'SSL_CERT_FILE',
   'GIT_CONFIG_GLOBAL', 'GIT_TEMPLATE_DIR', 'GIT_EXEC_PATH', 'GIT_PAGER',
   'PYTHONHOME', 'PYTHONPATH', 'PYTHONNOUSERSITE',
   'npm_config_registry',

@@ -804,7 +804,7 @@ function overlay(runTree) {
  * @param {string} runTree - stage 的 `root/dsh`
  */
 function copyCliData(runTree) {
-  const cliAssets = resolve(ROOT, 'app/src/main/assets/cli');
+  const cliAssets = resolve(ROOT, 'build/cli-assets');
   if (!existsSync(cliAssets)) {
     log('警告：assets/cli 不存在（未投放 CLI？），跳过 cli-data');
     return;
@@ -818,6 +818,7 @@ function assertStage(root) {
   const runTree = resolve(root, 'dsh');
   checks.push(['bootstrap.js 存在', existsSync(resolve(root, 'bootstrap.js'))]);
   checks.push(['host-boot.js 存在', existsSync(resolve(root, 'host-boot.js'))]);
+  checks.push(['cli-env.js 存在（112）', existsSync(resolve(root, 'cli-env.js'))]);
   checks.push(['@deepseek-ai/dsh 存在', existsSync(resolve(runTree, 'node_modules/@deepseek-ai/dsh/package.json'))]);
   checks.push(['Web UI dist 存在', existsSync(resolve(runTree, 'node_modules/@deepseek-ai/dsh-web-frontend/dist/index.html'))]);
   checks.push(['profiles/android 存在', existsSync(resolve(runTree, 'profiles/android/package.json'))]);
@@ -859,8 +860,8 @@ function main() {
   rmSync(root, { recursive: true, force: true });
   mkdirSync(root, { recursive: true });
   renameSync(stage, resolve(root, 'dsh'));
-  // 载荷脚本（bootstrap/host/shims）
-  for (const entry of ['bootstrap.js', 'host-boot.js', 'shims']) {
+  // 载荷脚本（bootstrap/host/shims/cli-env）
+  for (const entry of ['bootstrap.js', 'host-boot.js', 'cli-env.js', 'shims']) {
     const src = resolve(PAYLOAD_SRC, entry);
     if (!existsSync(src)) fail(2, `缺少载荷文件：${src}`);
     cpSync(src, resolve(root, entry), { recursive: true });
