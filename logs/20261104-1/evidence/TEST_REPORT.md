@@ -13,7 +13,7 @@
 | TC-112-3 | Agent 上下文命令（bash 通路） | ✅ PASS | Agent 会话内 bash 工具 7 条命令全 `[exit code: 0]`：node v26.13.0 / git 2.56.0 / pnpm 12.16.1 / python 3.14.10 / uv 0.13.6 / npm 11.20.0 / pip 26.2.2（截图 `evidence/04-git-tools-e2e.png` 同会话） |
 | TC-112-4 | PTY 终端命令回程 | ⏳ 未单独驱动 | PTY 面板由 111 已证；CLI spawn 通路与 bash 相同（同 PATH/农场），node-pty 仍就绪（S6 垫片 installed） |
 | TC-112-5 | 替换 204-git 21 工具闭环 | ✅ PASS | Agent 会话内 `git_init`（main）→ `write`→ `git_add`（A README.md）→ `git_commit`（dc78f00, yourname）→ `git_log`（含标题）→ `git_status`（clean）；修复过程见下 |
-| TC-112-6 | 替换 110-pnpm install/lookup | 🟡 部分 | pnpm 二进制 12.16.1 经 Agent bash 验证；desktopPnpm 框架已接农场（DSH_PNPM_ENGINE=$HOME/bin/pnpm）；install 未跑（需 registry 网络，CN 网络限制） |
+| TC-112-6 | 替换 110-pnpm install/lookup | ✅ 实测 | **引擎确认**：DSH_PNPM_ENGINE=$HOME/bin/pnpm（→ libpnpm_cli.so）；载荷内纯 JS dsh-market-pnpm ABSENT；runPnpmInProcess 为 spawn 二进制。**安装**（UI 插件市场→dsh-session-superagent→确认安装）：profile package.json 依赖 + node_modules/dsh-session-superagent + .pnpm-store/v11 落盘。**卸载**（二进制 pnpm remove，与桌面 uninstall 同引擎调用）：`Packages: -1` / `Done in 32ms using pnpm v12.16.1` / node_modules 移除 / deps 清空。另：首次 UI 点击实际完成了 wallpaper-engine 的**真实市场卸载**，node_bridge.log 捕获了 pnpm 12.x `scope/context/stage/stats/summary` debug（storeDir v11、removed 13）。设备状态已恢复基线 |
 | TC-112-L2-1 | Web UI 加载 | ✅ PASS | CDP：`DSH Desktop` @ 127.0.0.1:port 首屏正常 |
 | TC-112-L2-2 | 设置 DeepSeek API KEY（**值不落盘仓库**） | ✅ PASS | 模型页「已保存 DeepSeek」；重装后凭据保留；KEY 仅运行时注入，未写入任何规格/日志 |
 | TC-112-L2-3 | 创建工作区 | ✅ PASS | browse picker → `…/workspace`，主界面「workspace / 标准模式」 |
