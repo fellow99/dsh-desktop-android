@@ -1,7 +1,8 @@
 /**
  * `@dsh-android/shell` — `ctx.shell` provider for Android.
  *
- * Android has no PTY (`/dev/ptmx` is absent), so this executor runs one
+ * PTY is provided by `@dsh-android/subprocess#spawnTerminal` (node-pty:26.13.0,
+ * 111, `AndroidTerminalHandle`); this `ctx.shell` executor runs one
  * long-lived `/system/bin/sh` and frames every call with a random sentinel line
  * (`@dsh-android/shell/framing`). The seam contract is the upstream one
  * (`packages/shell/shell/src/index.ts:64-94`, `types.ts:140-238`):

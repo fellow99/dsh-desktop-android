@@ -392,7 +392,8 @@ export class OhosSubprocessRuntime extends Service {
   }
 
   /**
-   * Inspect shell-selection facts. The platform has one shell and no PTY.
+   * Inspect shell-selection facts. The platform has one shell; PTY is provided
+   * by `AndroidTerminalHandle` (111).
    * @returns {Promise<{ platform: 'posix', defaultShell: string }>}
    */
   async terminalEnvironment() {
