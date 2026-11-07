@@ -9,6 +9,13 @@ desktop delivery with an **in-process Node + the system WebView**.
 - **Stack**: Kotlin (View system) · system WebView · in-process `libnode.so` (`node::Start`, JNI slot-table bridge) · dsh Host (HTTP + WebSocket)
 - **Adaptation principle**: **zero upstream patches** — `android` profile + `@dsh-android/bundle` (three kinds of patch operations) + tagged shims/materialization-time patches + bespoke seam plugins (`packages/*-android`)
 
+## Key capabilities
+
+- **Full PTY terminal** — `node-pty:26.13.0` implementation; the right-rail Terminal panel real-forks `/system/bin/sh -i` (device-verified 2026-11-01; see `specs/111-pty-integration`)
+- **Bundled CLI** — `node` `python` `git` `uv` `pnpm`, plus their `npm` `npx` `corepack` `pip` (aosp CLI farm; see `specs/112-cli-integration`)
+- **System built-in commands** — toybox full text/file set; `awk`/`sed`/`tr`; `tar`/`gzip`; `sha256sum`; `curl`; `ping`; `pm`; `getprop`; `logcat`
+- **Capability doc** — [docs/安卓常规终端命令.md](docs/安卓常规终端命令.md)
+
 ## Runtime model
 
 ```

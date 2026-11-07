@@ -8,6 +8,13 @@
 - **技术栈**：Kotlin（View 体系）· 系统 WebView · 进程内 `libnode.so`（`node::Start`，JNI 槽位表桥）· dsh Host（HTTP + WebSocket）
 - **适配原则**：上游**零补丁** —— `android` profile + `@dsh-android/bundle`（三类 patch 操作）+ 带标记垫片/物化期补丁 + 自建 seam 插件（`packages/*-android`）
 
+## 关键能力
+
+- **全功能 PTY 终端**：`node-pty:26.13.0` 实现——右侧栏「终端」面板真 fork `/system/bin/sh -i`（真机实证 2026-11-01，见 `specs/111-pty-integration`）
+- **预置 CLI**：`node` `python` `git` `uv` `pnpm`，及其 `npm` `npx` `corepack` `pip`（aosp CLI 农场，见 `specs/112-cli-integration`）
+- **系统内置命令**：toybox 全文本/文件集；`awk`/`sed`/`tr`；`tar`/`gzip`；`sha256sum`；`curl`；`ping`；`pm`；`getprop`；`logcat`
+- **能力文档**：[docs/安卓常规终端命令.md](docs/安卓常规终端命令.md)
+
 ## 运行模型
 
 ```
