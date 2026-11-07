@@ -1,0 +1,18 @@
+# aosp-node-cli v26.13.0 重新构建 → 更新 dsh-desktop-android（证据）
+
+workflow: https://github.com/fellow99/aosp-node-cli/actions/runs/42237842816 (build-android-arm64-v8a 3h15m56s success)
+release: v26.13.0 (updated 2026-11-06T18:09Z)
+archive: node-cli-v26.13.0-android-arm64-v8a.tar.gz
+local sha256: f336a8c2adb272a70346215115bf60f8dfc5c532edd0942f9634747612f8e9a1   == 官方 .sha256 侧车 ✓
+size: 75579004 (旧 46531153)  → libnode_cli.so 100,037,408 B（旧 ~62MB）
+build: node 26.13.0 / intl=full-icu (ICU 78.3) / NDK 30.0.16248370 / aosp-api 24 / 16KB / 无 --shared
+新增: node-cli-release.aar / BUILD-METADATA.txt / FETCH-METADATA.json / node-bridge-tools/manifest.json
+provision: --check 通过（12 .so + cli-assets + 元数据）
+载荷: sha d49b4a21b870（rc.5，含新 cli-data）; APK 215,676,468 B
+
+真机验证（8f155833，payload d49b4a21b870）:
+  cli-env probe: node=v26.13.0 git=2.56.0 python=3.14.10 pnpm=12.16.1 uv=0.13.6
+  git passthrough: @dsh-android/git: registered 1 tool
+  npm -v = 11.20.0 / npx -v = 11.20.0 / corepack -v = 0.36.0
+  node ICU 78.3：zh-CN-u-ca-chinese → "2026丙午年九月廿九"；th-TH-u-nu-thai → "๗ พ.ย. ๒๕๖๙"；"istanbul".toLocaleUpperCase("tr") → İSTANBUL（full-icu 全过）
+  node 实体 → nativeLibraryDir/libnode_cli.so

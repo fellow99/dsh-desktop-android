@@ -14,12 +14,20 @@
       "repo": "aosp-node-cli",
       "archive": "node-cli-v26.13.0-android-arm64-v8a.tar.gz",
       "url": "https://github.com/fellow99/aosp-node-cli/releases/download/v26.13.0/node-cli-v26.13.0-android-arm64-v8a.tar.gz",
-      "sha256": "60d7d89919f93bcb279411ad872ca4babbe023a080a3de4e21c50057d682803f",
-      "size": 46531153,
+      "sha256": "f336a8c2adb272a70346215115bf60f8dfc5c532edd0942f9634747612f8e9a1",
+      "size": 75579004,
       "strip": 0,
       "jni": ["libnode_cli.so", "libnpm.so", "libnpx.so", "libcorepack.so"],
       "assets": ["node-bridge-tools"],
-      "licenses": ["LICENSE", "THIRD-PARTY-NOTICES.md"]
+      "licenses": ["LICENSE", "THIRD-PARTY-NOTICES.md"],
+      "metadata": {
+        "rebuiltAt": "2026-11-06T18:08:34Z",
+        "workflow": "https://github.com/fellow99/aosp-node-cli/actions/runs/42237842816",
+        "icu": "78.3 (intl=full-icu)",
+        "ndk": "30.0.16248370",
+        "aar": "node-cli-release.aar（含 libnode_cli.so 100MB 实体；Maven Central 第 2 轮候选）"
+      },
+      "extra": ["BUILD-METADATA.txt", "FETCH-METADATA.json"]
     },
     "python": {
       "version": "3.14.10",
