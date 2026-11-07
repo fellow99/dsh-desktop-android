@@ -1,0 +1,66 @@
+[English](./README.md) | 中文
+
+# dsh-desktop-android
+
+**DSH Desktop（Android 版）** — 在 Android 上以「进程内 Node + 系统 WebView」运行 [deepseek-harness](../deepseek-harness)（dsh）的桌面交付。
+
+- **版本**：0.2.1（`versionCode` 201）｜ 上游基线 `dsh-v0.2.1-rc.5` ｜ 引擎 libnode **v26.13.0**（small-icu）
+- **技术栈**：Kotlin（View 体系）· 系统 WebView · 进程内 `libnode.so`（`node::Start`，JNI 槽位表桥）· dsh Host（HTTP + WebSocket）
+- **适配原则**：上游**零补丁** —— `android` profile + `@dsh-android/bundle`（三类 patch 操作）+ 带标记垫片/物化期补丁 + 自建 seam 插件（`packages/*-android`）
+
+## 运行模型
+
+```
+MainActivity（前台 UI）
+  └─ DshRuntime：进程内启动 libnode → dsh Host（仅监听 127.0.0.1:<随机端口>）
+  └─ WebShellView（WebView）→ 加载 http://127.0.0.1:<port>/?token=<一次性 token>
+  └─ HostCapabilities：Kotlin↔Node 能力桥（冻结名 17 项，JSON 进出、handler 永不抛）
+  └─ KeepAliveService：agent turn 运行期 dataSync 前台保活（结束即停）
+```
+
+## 快速开始
+
+```bash
+# 1. 载荷装配（物化上游 dsh 运行树 + 本工程 packages/* + bundle patch + 垫片）
+node scripts/assemble-payload.mjs --deploy --apply
+# 2. 打包载荷 → app/src/main/assets/dsh-payload/{dsh.tar,dsh.version}
+node scripts/package-payload.mjs --src build/payload-stage/root
+# 3. 引擎投放（libnode.so，锁 sha256，八项 ELF 门禁）
+node scripts/provision-engine.mjs
+# 4. 构建（full=侧载线含 All-files；store=SAF-only 线）
+./gradlew assembleFullDebug        # 模拟器/侧载调试
+./gradlew assembleFullRelease      # 发布候选（需签名配置）
+# 5. 部署
+adb install -r app/build/outputs/apk/full/debug/app-full-debug.apk
+```
+
+环境前置（D.3 核对单）：IANA 时区（GMT 偏移名会被拒绝）、Android 13+ 需 POST_NOTIFICATIONS、All-files 授权（文档/下载 tab）、arm64-v8a 引擎（x86_64 模拟器需 ARM 转译镜像）。详见 [docs/安卓环境能力清单.md](docs/安卓环境能力清单.md) §D.3。
+
+> 支持下限 **Android 8.0 / API 26**（111 起 minSdk 29→26）：All-files（文档/下载）仅 API 30+ 可用（26–29 诚实降级）；通知运行时权限仅在 33+ 请求（<33 默认授予）。引擎/PTY/桥 AAR minSdk 24。
+
+## 仓库结构
+
+| 路径 | 内容 |
+|---|---|
+| `app/` | Kotlin 外壳：`DshRuntime`（启动状态机）、`WebShellView`、`host/HostCapabilities`（能力桥）、`host/KeepAliveService`（保活）、`host/PickDelegateActivity`（SAF 两段式） |
+| `packages/` | Node 侧 seam 插件：`bundle-android`（patch）、`subprocess-android`（含进程内 rg 替身）、`shell-android`（哨兵协议 shell）、`market-android`（desktopPnpm 契约+lookup）、`git-android`（单一 git passthrough 工具）、`notify-android`（通知+保活接线）、`facts-android`（`/_android/facts`，debug-only）、`workspace-picker-android(+client)`、`open-in-app-android`、`attachment-image-android`、`branding-android`（Web 品牌位：标题/侧栏/hero，官方 logo 几何）、`sandbox-android` |
+| `payload/` | 正式载荷入口：`bootstrap.js`（env 断言/垫片登记）+ `host-boot.js` + `shims/`（S1–S5） |
+| `profiles/android/` | `android` profile（bundle 引用、npmrc） |
+| `scripts/` | `assemble-payload.mjs` / `package-payload.mjs` / `provision-engine.mjs` |
+| `specs/` | 规格文档体系（ Constitution C1–C14 + overall-* + 000/101–109/012/201–206 模块 spec/plan） |
+| `docs/` | 工程规划、P0 门禁报告、安卓环境能力清单（能力矩阵 42 项 + D.2 待办）、**任务登记册（020）** |
+| `logs/` | 执行轮日志与取证证据（`<YYYYMMDD>-<N>/evidence/`） |
+
+## 关键文档
+
+- [docs/000-工程规划.md](docs/000-工程规划.md) — 总体规划与实现状态
+- [docs/112-设置对话框响应式.md](docs/112-设置对话框响应式.md) — 窄屏 UI 响应式（设置栏目 tabs 上移；左侧边栏浮动展开）：`@dsh-android/ui-responsive` CSS 注入方案与验证
+- [docs/安卓环境能力清单.md](docs/安卓环境能力清单.md) — 与 ark/hos 三路同表的能力矩阵、待办（§D.2）、门禁记录（§D.4）、任务登记册（§D.5 T-001…）
+- [docs/安卓常规终端命令.md](docs/安卓常规终端命令.md) — 除预置 CLI 外，Agent 可用的常规系统命令、四层能力源头与真机可达性
+- [specs/README.md](specs/README.md) — 规格索引；[specs/constitution.md](specs/constitution.md) — C1–C14 宪法（诚实降级/零补丁/不伪造）
+
+**品牌化**（2026-10-30）：应用名 DSH Desktop；启动图标/圆形图标/通知小图标由 `scripts/generate-brand-assets.py` 从工作区 `../assets/logo.png`（与 hos/ark 同源 #1296db 气泡）生成五密度 mipmap；Web 品牌位 `@dsh-android/branding`（移植 branding-ohos：页面标题 + sidebar/hero 三槽位 + 标题守卫，上游零补丁）。
+
+## 已实证能力速览（2026-10-29）
+
+对话与图片分析 ✅ ｜ bash 端到端 ✅ ｜ git clone/push（http(s)）✅ ｜ 通知（回合完成/审批）✅ ｜ Documents/Download 写入 ✅ ｜ `/_android/facts`（debug）✅ ｜ AgentKeepAlive 生命周期 ✅ ｜ grep/glob（进程内 rg 替身）✅（本仓库实现）｜ **PTY 终端 ✅（node-pty:26.13.0，右侧栏真机实证 2026-11-01）** ｜ 真机复测（MIX/Android 8.0，minSdk 26）✅ 本轮（2026-11-01）

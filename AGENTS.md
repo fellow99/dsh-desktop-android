@@ -37,7 +37,7 @@ MainActivity（前台 UI）
 | `logs/` | 执行轮日志与取证证据（`<YYYYMMDD>-<N>/evidence/`） |
 
 ### 关键文档
-- `docs/000-工程规划.md`、`docs/安卓环境能力清单-v0.2.1.md`（含 D.2 待办 / D.4 门禁 / D.5 任务登记册 T-001…）
+- `docs/000-工程规划.md`、`docs/安卓环境能力清单.md`（含 D.2 待办 / D.4 门禁 / D.5 任务登记册 T-001…）
 - `specs/README.md`（规格索引）、`specs/constitution.md`（C1–C14 宪法：诚实降级 / 零补丁 / 不伪造）
 
 ---
@@ -90,7 +90,7 @@ MainActivity（前台 UI）
 - **鸿蒙侧无关**；本工程为 Android/Kotlin + Node。**Node 侧插件/载荷**开发遵循工作区 `specs-based-devflow` 与 `systematic-debugging`、`requesting-code-review` / `receiving-code-review` 规范。
 - 规格化：`specs/` 已有 as-built 规格；新增/变更功能遵循 speckit 技能链（`speckit-specify → plan → tasks`，实现用 `speckit-implement`）。
 - **Android 构建**：`./gradlew assembleFullDebug`（侧载）/ `assembleFullRelease`（发布，需签名）。设备验证用 `adb install`。
-- 每项能力须对照 `docs/安卓环境能力清单-v0.2.1.md` 的诚实降级原则，**不伪造能力**。
+- 每项能力须对照 `docs/安卓环境能力清单.md` 的诚实降级原则，**不伪造能力**。
 
 ---
 
