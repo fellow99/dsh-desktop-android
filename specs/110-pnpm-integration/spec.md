@@ -5,6 +5,11 @@
 > 替换为 **aosp-pnpm-cli 真实 pnpm 二进制**（desktopPnpm 契约 install/lookup 成员保留，
 > 内部由 worker import 改为 spawn `$HOME/bin/pnpm` → libpnpm_cli.so；pnpm 12+ 运行期依赖
 > PATH 上 node，由 cli-env 农场保证）。
+>
+> **pnpm-cli 合规检查（2026-11-05）**：逐项核对源码与设备实测均为真——`pnpm-inprocess.js`
+> `spawn(entry, argv.slice(1))` 执行真实二进制并以子进程 exitCode 为完成判据；`DSH_PNPM_ENGINE`
+> 由 host-boot 指向 `$HOME/bin/pnpm`（→ libpnpm_cli.so）；`pnpm-workspace.yaml` 仍生成
+> `nodeLinker: hoisted` + `packageImportMethod: copy`；单飞锁 BUSY_MESSAGE 保留。
 
 ## 功能需求（替换后语义，详见 specs/112-cli-integration/spec.md FR-112-5）
 
