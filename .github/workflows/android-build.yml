@@ -1,11 +1,11 @@
 # 012-building-workflow · GitHub Actions 自动构建与发布
 #
-# 触发：push tag v*（首发 v0.2.1）→ 构建正式签名 full/release APK 并发布 GitHub Release。
+# 触发：push tag v*（首发 v0.2.2）→ 构建正式签名 full/release APK 并发布 GitHub Release。
 # 手动：workflow_dispatch（无 tag 时回落工程默认版本 0.1.0/1，构建 debug 签名包，仅用于彩排）。
 #
 # 三件套在云端现做（二进制不入库，docs/000-工程规划.md §13）：
 #   ① 引擎：aosp-node-runtime Release 归档（sha256 对账）→ 八项 ELF 门禁 → 投放 jniLibs
-#   ② 载荷：deepseek-harness @ dsh-v0.2.1-rc.5（pnpm）+ dsh-market @ v1.73.7（npm）
+#   ② 载荷：deepseek-harness @ dsh-v0.2.2-rc.1（pnpm）+ dsh-market @ v1.73.14（npm）
 #      → assemble-payload --deploy --apply → package-payload
 #   ③ APK：tag 触发 :app:assembleFullRelease（正式签名，版本从 tag 注入）；
 #          workflow_dispatch 彩排回落 :app:assembleFullDebug（AGP debug 签名）。
@@ -49,8 +49,8 @@ jobs:
       NODE_RUNTIME_REPO: fellow99/aosp-node-runtime
       # runtime.lock.json 必须来自 active=26.13.0 的提交（origin/main@290c14d0）
       NODE_RUNTIME_REF: 290c14d0ba09945687bfde1ecfd4008826203c9e
-      DSH_HARNESS_REF: dsh-v0.2.1-rc.5
-      DSH_MARKET_REF: v1.73.7
+      DSH_HARNESS_REF: dsh-v0.2.2-rc.1
+      DSH_MARKET_REF: v1.73.14
       PNPM_VERSION: '11.28.5'        # 对齐 deepseek-harness packageManager
       EXPECTED_ENGINE_NODE: '26.13.0' # 引擎配对：node-runtime 26.13.0 ↔ node-pty 26.13.0
       # release 签名证书指纹（非密文，公开可对账；keystore 本体不入库）
@@ -316,7 +316,7 @@ jobs:
           |---|---|
           | APK | \`$APK_NAME\`（sha256 \`$APK_SHA\`） |
           | 签名 | 证书 SHA-256 \`$CERT_SHA256\`（alias \`$KEY_ALIAS\`） |
-          | 载荷 | dsh.tar sha256 \`$TAR_SHA\`（dsh 0.2.1-rc.5 / node 26.13.0） |
+          | 载荷 | dsh.tar sha256 \`$TAR_SHA\`（dsh 0.2.2-rc.1 / node 26.13.0） |
           | 上游 | harness \`$DSH_HARNESS_REF\` / market \`$DSH_MARKET_REF\` / runtime lock \`$NODE_RUNTIME_REF\` |
 
           侧载：下载 APK 直接安装；同密钥后续版本可覆盖升级。

@@ -289,7 +289,7 @@ function prunePayload(stage) {
 /** 待装配的输入是否成立；不成立时给出下一步命令。 */
 function assertDeployInputs() {
   if (!existsSync(resolve(DSH_ROOT, 'package.json'))) {
-    fail(2, `上游未找到：${DSH_ROOT}`, '确认 ../deepseek-harness 处于 dsh-v0.2.1-rc.5');
+    fail(2, `上游未找到：${DSH_ROOT}`, '确认 ../deepseek-harness 处于 dsh-v0.2.2-rc.1');
   }
   const cliBin = resolve(DSH_ROOT, 'apps/cli/lib/bin.js');
   const sampleLib = resolve(DSH_ROOT, 'packages/core/agent/lib/index.js');
@@ -428,20 +428,32 @@ function patchPluginManagerLookup(runTree) {
   const withHelper = text.replace(helperAnchor, helper);
 
   // 锚点 2：registry lookup 调用点 → feature-detect 后分支（缩进自适应：deploy 后层级可能加深）
-  const callNeedle = 'const view = await viewProfilePackage(this.profile.dir, spec.trim(), {';
+  const callNeedle = 'const view = await viewProfilePackage(this.profile.dir, spec, {';
   const callNeedleCount = withHelper.split(callNeedle).length - 1;
   if (callNeedleCount !== 1) fail(1, `T-001 call 锚点不唯一或缺失（${callNeedleCount}）`);
   const callStart = withHelper.indexOf(callNeedle);
-  const closeIdx = withHelper.indexOf('registry: current', callStart);
-  if (closeIdx < 0) fail(1, 'T-001 call 收尾锚点缺失');
-  const closeEnd = withHelper.indexOf('});', closeIdx);
+  // 收尾锚点：从调用对象起始 `{` 做括号配平扫描（0.2.2 把选项简写为 `registry`，
+  // 不再有 `registry: current` 唯一键；括号扫描对缩进/参数形状自适应）。
+  const openBrace = withHelper.indexOf('{', callStart);
+  if (openBrace < 0) fail(1, 'T-001 call 起始对象锚点缺失');
+  let depth = 0;
+  let closeBrace = -1;
+  for (let i = openBrace; i < withHelper.length; i += 1) {
+    if (withHelper[i] === '{') depth += 1;
+    else if (withHelper[i] === '}') {
+      depth -= 1;
+      if (depth === 0) { closeBrace = i; break; }
+    }
+  }
+  if (closeBrace < 0) fail(1, 'T-001 call 收尾对象锚点缺失');
+  const closeEnd = withHelper.indexOf(');', closeBrace);
   if (closeEnd < 0) fail(1, 'T-001 call 结束锚点缺失');
-  const callEndAbs = closeEnd + '});'.length;
+  const callEndAbs = closeEnd + ');'.length;
   const lineStart = withHelper.lastIndexOf('\n', callStart) + 1;
   const indent = withHelper.slice(lineStart, callStart);
   const inner = `${indent}\t`;
   const callText = withHelper.slice(callStart + 'const view = '.length, callEndAbs);
-  const callPatch = `/* ${MARK}: 宿主发布 desktopPnpm.lookup 时走进程内 view（本平台无可执行 pnpm）。 */\n${indent}const desktopPnpm = (() => { try { return typeof this.ownerContext?.get === "function" ? this.ownerContext.get("desktopPnpm") ?? null : null } catch { return null } })();\n${indent}const view = desktopPnpm !== null && typeof desktopPnpm.lookup === "function"\n${inner}? await viewProfilePackageInProcess(desktopPnpm, this.profile.dir, spec.trim(), {\n${inner}\ttimeoutMs: this.inspectTimeoutMs,\n${inner}\t...signal === void 0 ? {} : { signal },\n${inner}\tregistry: current\n${inner}})\n${indent}: ${callText}`;
+  const callPatch = `/* ${MARK}: 宿主发布 desktopPnpm.lookup 时走进程内 view（本平台无可执行 pnpm）。 */\n${indent}const desktopPnpm = (() => { try { return typeof this.ownerContext?.get === "function" ? this.ownerContext.get("desktopPnpm") ?? null : null } catch { return null } })();\n${indent}const view = desktopPnpm !== null && typeof desktopPnpm.lookup === "function"\n${inner}? await viewProfilePackageInProcess(desktopPnpm, this.profile.dir, spec.trim(), {\n${inner}\ttimeoutMs: this.inspectTimeoutMs,\n${inner}\t...signal === void 0 ? {} : { signal },\n${inner}\tregistry\n${inner}})\n${indent}: ${callText}`;
   const patched = `${withHelper.slice(0, lineStart)}${callPatch}${withHelper.slice(callEndAbs)}`;
   writeFileSync(file, patched);
   if (!readFileSync(file, 'utf8').includes(MARK)) fail(1, `T-001 补丁后标记缺失：${file}`);
