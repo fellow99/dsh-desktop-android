@@ -151,7 +151,20 @@ jobs:
           npm ci --no-audit --no-fund
           npm run build
 
-      - name: ⑧⑨ 装配 + 打包载荷（版本注入；上游根经环境变量指向 upstream/*）
+      # ⑧ CLI 五件套投放（112-cli-integration）：assemble-payload 断言 cli-data（build/cli-assets）
+      # 与 CLI 的 jniLibs 必须在先。归档从 fellow99/aosp-*-cli Release 下载，sha256 见
+      # scripts/cli.lock.json；归档缓存以 cli.lock.json 为键（发布频率低，缓存命中网速换 cd）。
+      - name: ⑧ CLI 归档缓存（键 = cli.lock.json）
+        uses: actions/cache@v4
+        with:
+          path: build/.cli-cache
+          key: cli-cache-${{ hashFiles('scripts/cli.lock.json') }}
+          restore-keys: cli-cache-
+
+      - name: ⑧ Provision CLI（node/python/git/uv/pnpm → jniLibs + build/cli-assets）
+        run: node scripts/provision-cli.mjs
+
+      - name: ⑨ 装配 + 打包载荷（版本注入；上游根经环境变量指向 upstream/*）
         env:
           APP_VERSION: ${{ steps.meta.outputs.version }}
           DSH_HARNESS_DIR: ${{ github.workspace }}/upstream/deepseek-harness
