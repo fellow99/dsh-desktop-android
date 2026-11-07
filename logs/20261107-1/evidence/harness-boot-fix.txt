@@ -1,0 +1,5 @@
+# HARNESS boot 阻塞修复（payload 87be297b9ee9）
+
+根因：rc.5 的 @deepseek-ai/dsh-client-ui-trajectory 客户端 inject remote.toolResults，载荷内全包（源码+编译产物）无任何提供方；上游 web-app bundle 无条件插入该插件 ⇒ web boot 整页失败。
+修复：packages/bundle-android/cordis.patch.yml 按宪法 C2/C14 禁用 ui-trajectory（平台能力缺失如实裁剪），与 permission/ui-permission 同模式。
+验证：重新装配后首页正常渲染（DSH Desktop / 选择工作区），无 web boot 错误；@dsh-android/git registered 1 tool (git passthrough)。

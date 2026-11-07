@@ -125,6 +125,14 @@
 - id: ui-permission
   disabled: true
 
+# ── 运行轨迹（trajectory）客户端：依赖 `remote.toolResults` 远端，本壳无提供方 ───
+# dsh-client-ui-trajectory 客户端 inject `remote.toolResults`（工具结果流），而 rc.5 载荷内
+# 全包没有任何该远端提供方（全仓源码/编译产物仅 trajectory 客户端一处消费）。上游 web-app
+# bundle 无条件插入该插件 ⇒ web boot 以 `pending (waiting for service: remote.toolResults)`
+# 整页失败。Android 壳未提供该运行期能力，按宪法 C2/C14 如实裁剪而非伪造或假 stub。
+- id: ui-trajectory
+  disabled: true
+
 # ── 品牌与首次引导：按本产品身份交付，不把上游的预览提示与官方引导带给用户 ────────
 - id: ui-settings-general
   config:
