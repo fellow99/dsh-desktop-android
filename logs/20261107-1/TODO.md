@@ -9,7 +9,7 @@
 - [x] N4 若布局变化：更新 `scripts/provision-cli.mjs` node 阶段（strip/文件清单/投放目标）
 - [x] N5 重跑 provision 投放：12 个 .so→jniLibs + cli-assets；核对与旧产出的 diff
 - [x] N6 assemble-payload（rc.5）→ package → gradle assembleFullDebug 完成；⚠ 真机安装被 MIUI 拦截（INSTALL_FAILED_USER_RESTRICTED，需设备放行）
-- [ ] N7 真机验证：cli-env 探针 node/npm/npx/corepack + bash 工具 node -v；L2 或至少 host 注册
-- [ ] N8 回填记录（cli 数据事实源/版本）；提交（子模块 + 父工程指针）；无 KEY/口令入盘
+- [x] N7 真机验证：cli-env 探针 node/npm/npx/corepack + bash 工具 node -v；L2 或至少 host 注册
+- [x] N8 回填记录（cli 数据事实源/版本）；提交（子模块 + 父工程指针）；无 KEY/口令入盘
 
 > 纪律：不改 git 分支（main）；提交用 Conventional Commits；敏感信息不落盘。
