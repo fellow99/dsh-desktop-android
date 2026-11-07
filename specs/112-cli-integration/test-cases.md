@@ -58,15 +58,18 @@
 **Actual**:
 **Status**:
 
-### TC-112-5：替换 204-git —— 21 工具闭环
+### TC-112-5：替换 204-git —— 单一 `git` 工具闭环（第二阶段修订）
 **Priority**: P1 ｜ **Type**: 功能
 **Precondition**: 应用已 READY；公开 http(s) git 远端可达
 **Steps**:
-1. 会话内 `git_clone` 公开仓库（浅克隆 depth=1）→ 返回 root/branch/head
-2. `git_status` / `git_log` / `git_diff` 于克隆仓库
-3. `git_commit`（新建文件）+ `git_push` 到本机 smart-HTTP 通道（`adb reverse`）
-4. 无凭据私有远端 → 结构化「缺失凭据」错误（非 401 裸错误）
-**Expected**: clone/status/log/commit/push 端到端闭环；私有远端提示创建 `GIT_CREDENTIAL_<HOST>`
+1. 工具表核验：会话工具表中 git 相关仅 **单一 `git`**（非 21 个 `git_*`）；host 日志 `@dsh-android/git: registered 1 tool (git passthrough)`
+2. 会话内 `git init`（`dir`＝会话工作区）→ 返回 `code 0`/`root`；落盘断言 `.git`
+3. 写 README → `git add -A` → `git commit -m …` → `git log --oneline`（含标题）→ `git status`（逐个经 `git` 工具，全程返回 code/stdout/stderr）
+4. `git clone` 公开仓库（浅克隆 `--depth 1`）→ 返回 `code 0`/`root`
+5. **argv 护栏**：`git` 工具执行 `--git-dir=/data/local/tmp …` → 拒绝（结构化错误）；`-C /sdcard …` → 拒绝；`-C <根内子目录>` → 放行
+6. **凭据 mirror**：设置页存 `GIT_CREDENTIAL_<HOST>`（值＝测试凭据，**仅设备会话内注入，不落盘本文档**）→ `git` 工具对含该 host 的 URL 命令前置 mirror → 落盘断言 `$DSH_HOME/.git-credentials`（`0600`，git 格式一行）
+7. 无凭据私有远端 → 结构化「缺失凭据」错误（提示 `GIT_CREDENTIAL_<HOST>`，非 401 裸错误）
+**Expected**: 单一 `git` 工具 clone/commit/log/status 端到端闭环；护栏拒绝越界选项；mirror 落盘 0600；私有远端提示存储名
 **Actual**:
 **Status**:
 

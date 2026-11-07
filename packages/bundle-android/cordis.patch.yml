@@ -99,7 +99,7 @@
         probeTimeoutMs: 10000
         iconTimeoutMs: 10000
         launchWatchMs: 1000
-    # GIT（P3）：isomorphic-git 闭包随包（packages/git-android/node_modules 内置）
+    # GIT（P3）：真实 git 二进制（aosp-git-cli，cli-env 农场）+ 单一 git passthrough 工具（112）
     - id: git
       name: '@dsh-android/git'
     # 市场（P3）：desktopProfiles/desktopPnpm 契约 + 随包 pnpm 引擎

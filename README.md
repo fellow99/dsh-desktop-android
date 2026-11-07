@@ -41,7 +41,7 @@ adb install -r app/build/outputs/apk/full/debug/app-full-debug.apk
 | 路径 | 内容 |
 |---|---|
 | `app/` | Kotlin 外壳：`DshRuntime`（启动状态机）、`WebShellView`、`host/HostCapabilities`（能力桥）、`host/KeepAliveService`（保活）、`host/PickDelegateActivity`（SAF 两段式） |
-| `packages/` | Node 侧 seam 插件：`bundle-android`（patch）、`subprocess-android`（含进程内 rg 替身）、`shell-android`（哨兵协议 shell）、`market-android`（desktopPnpm 契约+lookup）、`git-android`（21 工具）、`notify-android`（通知+保活接线）、`facts-android`（`/_android/facts`，debug-only）、`workspace-picker-android(+client)`、`open-in-app-android`、`attachment-image-android`、`branding-android`（Web 品牌位：标题/侧栏/hero，官方 logo 几何）、`sandbox-android` |
+| `packages/` | Node 侧 seam 插件：`bundle-android`（patch）、`subprocess-android`（含进程内 rg 替身）、`shell-android`（哨兵协议 shell）、`market-android`（desktopPnpm 契约+lookup）、`git-android`（单一 git passthrough 工具）、`notify-android`（通知+保活接线）、`facts-android`（`/_android/facts`，debug-only）、`workspace-picker-android(+client)`、`open-in-app-android`、`attachment-image-android`、`branding-android`（Web 品牌位：标题/侧栏/hero，官方 logo 几何）、`sandbox-android` |
 | `payload/` | 正式载荷入口：`bootstrap.js`（env 断言/垫片登记）+ `host-boot.js` + `shims/`（S1–S5） |
 | `profiles/android/` | `android` profile（bundle 引用、npmrc） |
 | `scripts/` | `assemble-payload.mjs` / `package-payload.mjs` / `provision-engine.mjs` |

@@ -2,38 +2,24 @@
  * Plugin configuration for `@dsh-android/git`. Every deployment-varying tunable lives
  * here rather than as a hardcoded literal, so a profile row can override it without a
  * code change (the `DEFAULT_`-prefixed exports name the defaults).
+ *
+ * 112-cli-integration（FR-112-4 修订）：21 工具精简为单个 `git` passthrough 后，按动词的
+ * 调参（authorName / authorEmail / maxDiffBlobBytes）不再被任何代码消费，本文件只保留
+ * 对所有 git 命令都成立的网络预算 `networkTimeoutMs`。
+ *
  * @module @dsh-android/git/config
  */
 
 import z from '@deepseek-ai/schemastery'
 
 /**
- * Default commit/merge author name. **Deliberately an obvious placeholder** — the plugin
- * must never bake a real person's identity into a shipped artifact. Real identities come
- * from the repository-local config the `git_config` tool writes.
- */
-export const DEFAULT_AUTHOR_NAME = 'yourname'
-
-/** Default commit/merge author email; same placeholder rationale as {@link DEFAULT_AUTHOR_NAME}. */
-export const DEFAULT_AUTHOR_EMAIL = 'yourname@somehost'
-
-/**
- * Per-file byte cap for `git_diff`. The unified diff is produced in memory, so one huge
- * blob must never be read whole; a file above this cap is reported as skipped rather than
- * silently truncated.
- */
-export const DEFAULT_MAX_DIFF_BLOB_BYTES = 1024 * 1024
-
-/**
- * Wall-clock budget for one network operation (`clone`/`fetch`/`pull`/`push`). Pure-JS git
- * over a slow link needs room, but an unbounded request would pin the host process.
+ * Wall-clock budget for one `git` invocation when the model does not set `timeoutMs`.
+ * Network operations (`clone`/`fetch`/`pull`/`push`) over a slow link need room, but an
+ * unbounded request would pin the host process.
  */
 export const DEFAULT_NETWORK_TIMEOUT_MS = 5 * 60 * 1000
 
 /** Plugin config schema; every key is optional and the defaults above apply. */
 export const Config = z.object({
-  authorName: z.string().default(DEFAULT_AUTHOR_NAME),
-  authorEmail: z.string().default(DEFAULT_AUTHOR_EMAIL),
-  maxDiffBlobBytes: z.natural().default(DEFAULT_MAX_DIFF_BLOB_BYTES),
   networkTimeoutMs: z.natural().default(DEFAULT_NETWORK_TIMEOUT_MS),
 })

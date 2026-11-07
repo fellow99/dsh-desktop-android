@@ -381,90 +381,7 @@ function assertGitPlugin(runTree) {
   }
   log('✓ git 插件：@dsh-android/git（真实 git 二进制后端，无 isomorphic-git）已物化');
 }
-function assertGitClosure(runTree) {
-  const nested = resolve(runTree, 'node_modules/@dsh-android/git/node_modules');
-  const manifest = resolve(nested, 'isomorphic-git/package.json');
-  if (!existsSync(manifest)) {
-    fail(1, `git 闭包缺失：${manifest}（packages/git-android/node_modules 需随包 vendor）`);
-  }
-  const httpNode = resolve(nested, 'isomorphic-git/http/node/index.js');
-  const httpNodeCjs = resolve(nested, 'isomorphic-git/http/node/index.cjs');
-  if (!existsSync(httpNode) && !existsSync(httpNodeCjs)) {
-    fail(1, 'isomorphic-git 缺 http/node 入口（闭包不完整）');
-  }
-  let count = 0;
-  const walk = (dir, depth) => {
-    if (depth > 4) return;
-    let entries;
-    try { entries = readdirSync(dir, { withFileTypes: true }); } catch { return; }
-    for (const e of entries) {
-      const full = resolve(dir, e.name);
-      if (e.isDirectory()) walk(full, e.name.startsWith('@') ? depth : depth + 1);
-      else if (e.name === 'package.json') count += 1;
-    }
-  };
-  walk(nested, 0);
-  if (count < GIT_CLOSURE_MIN_PACKAGES) {
-    fail(1, `git 闭包只有 ${count} 个包（下限 ${GIT_CLOSURE_MIN_PACKAGES}）`);
-  }
-  log(`✓ git 闭包：isomorphic-git + ${count} 包`);
-}
 
-/** 012：物化纯 JS pnpm 引擎到 <runTree>/node_modules/dsh-market-pnpm（worker 内 import，不 spawn）。 */
-function collectMarketPNPM(runTree) {
-  const dest = resolve(runTree, 'node_modules/dsh-market-pnpm');
-  if (existsSync(resolve(dest, 'package.json'))) {
-    log('pnpm 引擎已物化（断言通过）');
-    return;
-  }
-  const staging = resolve(WORK, 'pnpm-engine');
-  rmSync(staging, { recursive: true, force: true });
-  mkdirSync(staging, { recursive: true });
-  writeFileSync(resolve(staging, 'package.json'), JSON.stringify({ name: 'pnpm-engine-staging', version: '0.0.0', private: true }, null, 2) + '\n');
-  run(`pnpm add pnpm@${PNPM_VERSION} --config.node-linker=hoisted --ignore-scripts`, staging);
-  const src = resolve(staging, 'node_modules/pnpm');
-  if (!existsSync(resolve(src, 'package.json'))) fail(1, `pnpm 引擎物化失败：${src}`);
-  rmSync(dest, { recursive: true, force: true });
-  cpSync(src, dest, { recursive: true, dereference: true });
-  rmSync(staging, { recursive: true, force: true });
-  log(`pnpm 引擎已物化 (pnpm@${PNPM_VERSION})`);
-}
-
-/** 201：@reflink/reflink 的 Android 平台包存根。
- * pnpm 打包产物（dsh-market-pnpm/dist）只带 reflink 的 darwin/win32 原生件，无 android-arm64，
- * 且未带 @reflink/reflink-android-arm64 回退包；其 binding.js 在无绑定时 **直接 throw**，
- * 而 pnpm 在 store 初始化时会 eager require `@reflink/reflink` → 安装插件即报错（设备实测）。
- * reflink 只是导入优化，默认/复制导入法不调用它。此处物化一个可加载的存根（导出同名 API，调用即报
- * ENOTSUP），使 require 不再崩溃；导入法由 pnpm-worker 强制 `copy`（真实拷贝）。 */
-function collectReflinkStub(runTree) {
-  const dist = resolve(runTree, 'node_modules/dsh-market-pnpm/dist');
-  if (!existsSync(dist)) {
-    log('201：无 pnpm 引擎 dist，跳过 reflink 存根');
-    return;
-  }
-  const pkgDir = resolve(dist, 'node_modules/@reflink/reflink-android-arm64');
-  if (existsSync(resolve(pkgDir, 'package.json'))) {
-    log('@reflink/reflink-android-arm64 存根已物化（断言通过）');
-    return;
-  }
-  mkdirSync(pkgDir, { recursive: true });
-  writeFileSync(resolve(pkgDir, 'package.json'), JSON.stringify({
-    name: '@reflink/reflink-android-arm64',
-    version: '0.0.0-dsh-virtual-stub',
-    description: 'Stub: Android has no @reflink/reflink native binding. reflink is an import optimization; pnpm is forced to package-import-method=copy, so these functions are never called. Keeps the eager require from throwing (specs/201).',
-    main: 'index.js',
-    private: true,
-  }, null, 2) + '\n');
-  writeFileSync(resolve(pkgDir, 'index.js'), [
-    '// dsh android virtual stub: reflink unavailable on Android; consumers fall back to copy.',
-    'class ReflinkError extends Error { constructor(message) { super(message); this.name = \'ReflinkError\'; this.code = \'ENOTSUP\'; } }',
-    'const reflinkFile = () => Promise.reject(new ReflinkError(\'reflink is not supported on Android\'));',
-    'const reflinkFileSync = () => { throw new ReflinkError(\'reflink is not supported on Android\'); };',
-    'module.exports = { ReflinkError, reflinkFile, reflinkFileSync };',
-    '',
-  ].join('\n'));
-  log('@reflink/reflink-android-arm64 存根已物化（reflink 不支持 → pnpm 用 copy 导入）');
-}
 
 /** 206：物化 @vscode/ripgrep 的 android 平台包存根——真实包 lib/index.js 运行时
  * require.resolve(`@vscode/ripgrep-android-arm64/bin/rg`)，android 平台该 optionalDependency
@@ -777,7 +694,6 @@ function overlay(runTree) {
   // P3：git 插件断言 + pnpm 引擎（112 起 = aosp-pnpm-cli 二进制，经 cli-env 农场接入）
   assertGitPlugin(runTree);
   log('112：pnpm 引擎改自 aosp-pnpm-cli（$HOME/bin/pnpm），不再物化纯 JS pnpm（110 已替换）');
-  try { collectReflinkStub(runTree); } catch (e) { fail(1, `201 reflink 存根失败：${e.message}`); }
   try { collectRipgrepStub(runTree); } catch (e) { fail(1, `206 rg 存根物化失败：${e.message}`); }
   try { patchPluginManagerLookup(runTree); } catch (e) { fail(1, `T-001 补丁失败：${e.message}`); }
   try { patchFsPrimitives(runTree); } catch (e) { fail(1, `T-004 补丁失败：${e.message}`); }

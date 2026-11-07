@@ -2,75 +2,85 @@ English | [中文](./README_zh.md)
 
 # `@dsh-android/git`
 
-> The **git plugin** of DSH Desktop (HarmonyOS / Ark edition): it embeds the pure-JS [isomorphic-git](https://github.com/isomorphic-git/isomorphic-git) into the host process so a device **without a `git` binary** can still do version control. Same contract as the Electron edition (`dsh-desktop-hos/plugins/harmony-plugin-git`).
+> Git integration for the Android edition of DSH Desktop (`specs/112-cli-integration`): the real
+> **aosp-git-cli binary** (resolved through the `$HOME/bin` symlink farm wired by
+> `payload/cli-env.js`) is the execution engine, and the host ships just **one `git` passthrough
+> tool** that hands argv straight to the real binary. The 21 per-verb tools (originally the
+> isomorphic-git implementation of `dsh-desktop-hos/plugins/harmony-plugin-git`) have been
+> collapsed into that layer; the pure-JS closure is no longer bundled.
 
-## What ships
+## Deliverables
 
 | Face | Content |
 |---|---|
-| Host (`lib/index.js`) | **21 tools**: `git_init` `git_clone` `git_status` `git_diff` `git_log` `git_show` `git_add` `git_commit` `git_branch` `git_checkout` `git_reset` `git_merge` `git_cherry_pick` `git_revert` `git_stash` `git_tag` `git_remote` `git_fetch` `git_pull` `git_push` `git_config` |
-| Client (`lib/client.js`) | Settings page “Git credentials”: save / show state / remove (`settings.section`, id `git-credentials`) |
+| Host (`lib/index.js` + `lib/tools/git.js`) | **1 tool**: `git` — `argv` (the command line after `git`) + optional `dir`/`timeoutMs`; returns `code`/`root`/`stdout`/`stderr` |
+| Client (`lib/client.js`) | Settings page "Git 凭据" (Git credentials): save / view / delete (`settings.section`, id `git-credentials`) |
 
-One `insert` row in `@dsh-android/bundle` delivers both: the tools register on the host plane, and the page is discovered through the `dsh.client` declaration.
+A single `@dsh-android/bundle` `insert` line delivers both (tool registration on the host plane;
+the settings page is discovered by `dsh.client` scanning).
 
-## Configuration (`Config`, schemastery)
+## Tool semantics
 
-| Key | Default | Meaning |
+`git` passes `argv` verbatim to the real binary; the working directory is the fence-resolved
+repository root. Deliberately faithful: **a non-zero exit code is not treated as an error** —
+`git diff --exit-code` or `git status --short` returning 1 is a value the model must see. Only two
+failures are mapped to readable errors:
+
+- missing/refused authentication → names `GIT_CREDENTIAL_<HOST>` (Settings → Git 凭据) instead of a bare 401;
+- not a git repository → suggests `git init` / `git clone`.
+
+**argv confinement**: options that would let git open a repository outside the root are refused
+(`--git-dir` / `--work-tree` / `--exec-path` / `--separate-git-dir` / `--config-env=`); `-C` with an
+absolute path must stay inside the fenced root (relative subdirectories are allowed).
+
+## Config (`Config`, schemastery)
+
+| Key | Default | Description |
 |---|---|---|
-| `authorName` | `yourname` | Commit/merge author name. **Deliberately a placeholder**; real identities come from `git_config` writing repository-local config |
-| `authorEmail` | `yourname@somehost` | Same rationale |
-| `maxDiffBlobBytes` | `1048576` | Per-file cap for `git_diff`; larger blobs are reported as skipped, never silently truncated |
-| `networkTimeoutMs` | `300000` | Wall-clock budget for one network operation (clone/fetch/pull/push) |
+| `networkTimeoutMs` | `300000` | Wall-clock budget per `git` call (overridable per call via `timeoutMs`) |
 
 ## Credentials
 
-- Reference name: `GIT_CREDENTIAL_<HOST>` where `<HOST>` is `host[:port]` upper-cased with every non-alphanumeric replaced by `_`; value is `username:password` split on the **first** `:`.
-- Source priority: a host saved in Settings is read **from the dsh credential store**; everything else is read **from `<DSH_HOME>/.git-credentials`** (git's own format — one userinfo URL per line, `0600`, hand-editable).
-- Credentials actually used by a tool are **mirrored back** to that file on a best-effort basis (a read-only or full config dir never fails the operation) — copy `$DSH_HOME` elsewhere and another `git` can reuse them.
-- Nothing plaintext reaches the conversation, the logs or `cordis.patch.yml`; remote URLs are scrubbed of userinfo before they are printed.
-- Identity (`user.name`/`user.email`) never goes into the credential store.
+- Ref name: `GIT_CREDENTIAL_<HOST>`, `<HOST>` = `host[:port]` upper-cased, non-alphanumerics → `_`;
+  value = `username:password` (split on the **first** `:`).
+- The real `git` reads credentials via `credential.helper=store --file=$DSH_HOME/.git-credentials`;
+  `lib/git-credentials.js` maintains that file in git's native format (one URL-with-userinfo per
+  line, `0600`, temp-file + rename).
+- The `git` tool **pre-mirrors** credentials for every http(s) URL in argv before spawning:
+  `credentials.lookup(url)` syncs the settings-page store into that file (best effort; a failure
+  never fails the operation). Copying `$DSH_HOME` lets `git` elsewhere use the same credentials.
+- Cleartext never enters the conversation, logs, or `cordis.patch.yml`; remote addresses have their
+  userinfo scrubbed before they reach output.
+- Identity (`user.name`/`user.email`) stays out of the credential store.
 
 ## Fence
 
-Every call first resolves `dir` through `ctx.fs` into the absolute **repository root**, and every later I/O is confined to it (lexical check plus `realpath`):
+Each call resolves `dir` (default: the session directory) through `ctx.fs` to an absolute
+**repository root**, and `git` runs only inside that root:
 
 - root inside the session workspace → runs freely;
-- root outside it → `FS_SANDBOX_DENIED` with the shared marker and the same-turn escalation hint; a retry carrying `sandbox_permissions` + `justification` goes through the existing approval channel, once.
+- root outside → `FS_SANDBOX_DENIED` with the shared marker and escalation hint; a model retry
+  carrying `sandbox_permissions` + `justification` goes through the existing approval channel,
+  one-shot.
 
-**Accepted trade-off**: writes *inside* the repository do not pass `fs-sandbox.checkedTarget` one by one; the fence is a single point at the repository root (stricter than the `bash` tool, which has no fs fence at all).
-
-## Dependency materialization (build time, required)
-
-`isomorphic-git` is **not committed**; `collectGitRuntime()` in `scripts/assemble-payload.mjs` materializes it into this package's **nested** `node_modules/`:
-
-```
-<stage>/node_modules/@dsh-android/git/node_modules/isomorphic-git@1.44.2   ← 55 packages / ≈8.4 MiB
-```
-
-- Nested, not flattened: the payload top level already carries `pako@0.2.9` and friends — flattening would overwrite them and break upstream.
-- `diff` is **not** materialized: four upstream packages already declare `diff ^9.0.0`, so the payload top level has `diff@9.0.0`. This package only declares it as a peer (a second copy would shadow it and add 0.8 MiB).
-- The version pin lives in the assembly script; `lib/runtime.js` asserts it at load time.
+**Known trade-off**: writes *inside* the repository are not re-checked per call against
+`fs-sandbox.checkedTarget` (`git` is an independent process); the fence granularity is the
+repository root plus argv confinement (still stricter than the unconstrained `bash` tool).
 
 ## Known limitations
 
-- **`rebase` is not delivered** (isomorphic-git has no such primitive).
-- **No SSH**: HTTPS username/password only; `git@host:path` and `ssh://` are rewritten to https by the library (dropping the username).
-- Pure-JS performance: cloning a large repository is visibly slower than native git, and this project's `--jitless` profile makes it slower still (`depth`/`singleBranch`/`noTags` are the mitigations).
-- Binary files are reported as `Binary files … differ`, with no content-level diff.
-- SHA-1 repositories only.
-- The page cannot enumerate references (the credential API has no enumeration surface), so the "hosts you have entered" list lives in page `localStorage`; the page origin changes on every start, which empties that list after a restart (the credentials themselves are unaffected).
-- A plaintext `http://` remote sends Basic credentials base64-encoded over the wire; use `https://` in production.
+- **No SSH**: only http(s) transport; `git@host:path` and `ssh://` are out of scope this round
+  (aosp-git-cli side, phase 2).
+- Unauthenticated http(s) remotes fail immediately (`GIT_TERMINAL_PROMPT=0`), never hanging on an
+  interactive prompt.
+- Plain `http://` remotes send Basic credentials base64-encoded over the wire; use `https://` in
+  production.
+- The settings page cannot enumerate refs (the credential API has no enumeration face); the
+  "entered hosts" list lives in page `localStorage`, and the page origin changes every launch, so
+  the list is empty after a restart (stored credentials are unaffected).
 
-## Tests
+## Spec & acceptance
 
-```bash
-# The tests drive the real isomorphic-git closure, so it must be resolvable from this package.
-# Either copy it out of an assembled payload, or install it once locally:
-#   pnpm add isomorphic-git@1.44.2 --config.node-linker=hoisted --ignore-scripts   # (gitignored)
-node --test packages/git-ohos/test/*.test.mjs
-```
-
-- `test/fs-adapter.contract.test.mjs`: every promises method must be an `AsyncFunction` (a synchronous throw makes isomorphic-git treat the adapter as callback-style and **hangs every git call forever**), the dialect probe, and escape refusal.
-- `test/git-credentials.test.mjs`: parsing, matching, writing and removing `.git-credentials`, plus `0600`.
-
-Specification and device evidence: `specs/204-plugin-git/`.
+`specs/112-cli-integration/` (spec / plan / tasks / test-cases); device acceptance records under
+`logs/`. The upstream same-contract sources (isomorphic-git edition, untouched by 112) live at
+`dsh-desktop-hos/plugins/harmony-plugin-git` and `dsh-desktop-ark/packages/git-ohos`.

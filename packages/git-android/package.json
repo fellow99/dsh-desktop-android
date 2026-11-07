@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "Git operations on HarmonyOS without a git binary: the model-facing git tool family backed by the pure-JS isomorphic-git implementation, with a repository-root chroot filesystem adapter, sandbox-escalation fencing for repositories outside the session workspace, credential-store-backed HTTP auth, and a Git credentials settings page",
+  "description": "The model-facing git tool for the Android edition: one `git` passthrough tool that runs the real aosp-git-cli binary inside the session (repository-root fence + sandbox escalation, credential-store-backed HTTP auth via git's own .git-credentials, argv confinement, and a Git credentials settings page)",
   "main": "lib/index.js",
   "exports": {
     ".": {
@@ -33,8 +33,7 @@
     "@deepseek-ai/dsh-fs": "*",
     "@deepseek-ai/dsh-sandbox": "*",
     "@deepseek-ai/dsh-tools": "*",
-    "@deepseek-ai/schemastery": "*",
-    "diff": "^9.0.0"
+    "@deepseek-ai/schemastery": "*"
   },
   "license": "MIT"
 }

@@ -1,0 +1,24 @@
+# git passthrough 执行层设备证据（payload 547d30bbadb0，dsh 0.2.1-rc.5，真机 8f155833）
+
+## 1) 工具注册（host，logcat）
+[dsh-android] @dsh-android/git: registered 1 tool (git passthrough)
+（非 21 个 git_*；schema 校验通过）
+
+## 2) 环境/CLI 农场探针（app.log）
+cli-env: probe node=v26.13.0 git=git version 2.56.0 python=Python 3.14.10 pnpm=12.16.1 uv=uv 0.13.6
+cli-env: $HOME/bin 农场就绪（18 条软链）
+market: DSH_PNPM_ENGINE=.../dsh-home/home/bin/pnpm
+
+## 3) git 执行层（runGit 同款 spawn 参数：credential.helper=store --file + core.pager=cat + color.ui=never）
+$ git init -b main   → Initialized empty Git repository in .../tmp/gittest/.git/
+$ echo README > R.txt; git add -A; git commit → c20582d test commit
+$ git status --porcelain → (空，exit 0)
+$ git log --oneline → c20582d test commit
+$ git --version → git version 2.56.0（readlink → libgit_cli.so）
+credential.helper store：未配置凭据时不写 .git-credentials（符合预期）
+
+## 4) 阻塞登记：Web 全局启动失败（上游 rc.5 环境问题，与 112 无关）
+@deepseek-ai/dsh-client-ui-trajectory: pending (waiting for service: remote.toolResults)
+根因：dsh-web-app/cordis.patch.yml 硬插 ui-trajectory，其客户端 inject "remote.toolResults"；rc.5 载荷全包无提供方
+（grep toolResults 仅 trajectory client.js 消费）。→ web boot: 1 entry did not activate，SPA 停摆。
+与 112 改动无代码路径关联（git/market 均为 host 侧，web 客户端 boot 无涉）。

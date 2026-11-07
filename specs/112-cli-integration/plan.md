@@ -58,9 +58,13 @@ npm_config_registry     = DSH_ANDROID_REGISTRY（缺省 npmmirror）
 - `DEFAULT_PATH` 改为「引导层已注入的 `process.env.PATH` 优先，回退原系统路径」；`buildChildEnv` 的 `PATH` 转发已在 allowlist（不变）。
 - **git 插件与 bash 工具共用该 spawn 通路**：CLI 二进制经 node:child_process spawn（非 pty）时同样经 `resolveProgram` + 护栏。
 
-### D6 替换 204-plugin-git（真实 git 二进制后端）
+### D6 替换 204-plugin-git（真实 git 二进制后端，并精简工具族）
 
-- 新增 `packages/git-android/lib/git-exec.js`：把 21 工具公共的「isomorphic-git API 调用」替换为「栅栏化 spawn 真实 `git`（argv 构造 + 环境注入 + 超时 + 输出采集...abort）」。
+- 新增 `packages/git-android/lib/tools/git.js`：**单一 `git` passthrough 工具**（`argv`＋可选 `dir`/`timeoutMs`；返回 `code`/`root`/`stdout`/`stderr`）。LLM 已精通 git 命令，21 个按动词工具（Schema/渲染）精简为这一层；**非零退出码如实返回**（`git diff --exit-code`=1 是值）。
+- `lib/git-exec.js`：栅栏化 spawn 真实 `git`（argv 构造＋环境注入＋`credential.helper=store --file`＋超时＋输出采集＋脱敏＋abort）；argv 护栏（拒绝 `--git-dir`/`--work-tree`/`--exec-path`/`--separate-git-dir`/`--config-env=`；`-C` 绝对路径须在根内）。
+- `lib/fence.js`：仓库根裁决＋越区升级保留；删除 isomorphic-git 的 `fs` 适配层（`fs-adapter.js`/`createRepositoryFs`）与 `isMissingRepository`。
+- 凭据：`lib/auth.js` `GitCredentials.callbacks()`（isomorphic onAuth）删除；保留 `lookup`/`mirrorToFile`，`git` 工具 spawn 前对 argv 内 http(s) URL **前置 mirror**（store→`.git-credentials`，0600、temp+rename）；`git-credentials.js` 配置页存储契约不变（`GIT_CREDENTIAL_<HOST>`）。
+- 删除纯 JS 残留：21 `tools/*.js` 与 `toolkit.js`/`report.js`/`diff.js`/`fs-adapter.js`/`merge-worktree.js`/`runtime.js`；`assemble-payload.mjs` 去除 `collectGitRuntime`/`assertGitClosure`/`collectMarketPNPM`/`collectReflinkStub` 死代码；`specs/204-plugin-git/spec.md` 改为集成声明（指向本需求）。
 - `lib/runtime.js`：`loadGit()` 由 `import('isomorphic-git')` 改为 `loadGitBinary()`（解析 `$NLDIR/libgit_cli.so` / PATH `git`；缺失→结构化错误，含 remedy）。
 - 各 `tools/*.js` 内 isomorphic-git 调用替换为 git 子进程调用，保持 Schema/脱敏/超时/围栏语义；`output` 渲染不动。
 - 凭据：`lib/auth.js` `GitCredentials.callbacks()` 语义迁移为「写 `$HOME/.git-credentials`（0600；temporary+rename）或将 `GIT_ASKPASS` 指向一次性回调」；`git-credentials.js` 配置页存储契约不变（`GIT_CREDENTIAL_<HOST>`）。
@@ -75,7 +79,7 @@ npm_config_registry     = DSH_ANDROID_REGISTRY（缺省 npmmirror）
 ### D8 测试与门禁
 
 - 真机（已连接：小米 M2105K81C，API 30，arm64-v8a，Asia/Shanghai，已装 dsh）+ 备选 AVD Pixel_10（16KB 页）。
-- 门禁对照 D.3/D.4（G1–G13/L2），重点：CLI 版本可用（新 G-CLI）、git 21 工具闭环、pnpm install/lookup 闭环、L2-2..5 不回归。
+- 门禁对照 D.3/D.4（G1–G13/L2），重点：CLI 版本可用（新 G-CLI）、git 单工具（passthrough）闭环、pnpm install/lookup 闭环、L2-2..5 不回归。
 - 敏感信息：API KEY / 口令不入任何文档；测试凭据只在设备会话内注入（UI 设置页），不留盘（C10）。
 
 ## 依赖
@@ -94,5 +98,5 @@ npm_config_registry     = DSH_ANDROID_REGISTRY（缺省 npmmirror）
 | Python `PYTHONHOME/PYTHONPATH` 注入错误导致 import 失败 | 首启探针：`python -c "import sys; print(sys.version)"` 写 facts；失败降级注销 python 能力（C2） |
 | 模拟器/真机 `execve` ENOENT（C3 useLegacyPackaging） | 已 `useLegacyPackaging=true`（111 已证）；真机 `ls nativeLibraryDir` + exec 探针先行 |
 | 体积：CLI 五件 ≈ 190MB 归档（解包后 ~90MB jniLibs assets 增量） | 本轮接受（debug 包观测），体积治理列范围外（Play 动态特性） |
-| 21 工具接口回归 | 逐工具对照旧 Schema/输出；真机 git_clone/push 闭环 + 既有 3 个实证对齐 |
+| git 工具回归 | 真机 `git` passthrough 单工具 e2e（init/add/commit/log/status）+ clone；argv 护栏/凭据 mirror 专项 |
 | 真实 git 输出跨 ssh/协议差异 | 仅 http(s) 承诺；ssh 报「不在范围」结构化错误（C2） |

@@ -1,7 +1,8 @@
 /**
  * 112-cli-integration（US3 / FR-112-4）：真实 `git` 二进制执行器。
  *
- * 替代 isomorphic-git：21 工具改为在仓库根 spawn 真实 `git` 子进程（经 PATH/农场解析，
+ * 替代 isomorphic-git：git 工具族（现单 `git` passthrough，见 tools/git.js）改为在仓库根
+ * spawn 真实 `git` 子进程（经 PATH/农场解析，
  * 见 payload/cli-env.js 的 $HOME/bin 符号链接农场）。要点：
  *
  * - 环境注入（GIT_CONFIG_GLOBAL / GIT_TEMPLATE_DIR / GIT_EXEC_PATH / SSL_CERT_FILE / PATH）
@@ -65,6 +66,7 @@ export function runGit({ cwd, args, env, timeoutMs = 5 * 60 * 1000, signal }) {
   const commandArgs = [
     '-c', `credential.helper=store --file=${gitCredentialsPath()}`,
     '-c', 'core.quotepath=off',
+    '-c', 'core.pager=cat',
     '-c', 'color.ui=never',
     '-c', 'i18n.logOutputEncoding=UTF-8',
     ...args,

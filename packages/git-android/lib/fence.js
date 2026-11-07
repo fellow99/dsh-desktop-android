@@ -3,13 +3,16 @@
  * touch a given repository, and the escalation ladder that lets a user approve an exception.
  *
  * The vocabulary, the strictly-wider ladder, and the fail-closed approval sequence belong to
- * `@deepseek-ai/dsh-sandbox`; this module only adapts them to the git tool family, mirroring
+ * `@deepseek-ai/dsh-sandbox`; this module only adapts them to the git tool, mirroring
  * `@deepseek-ai/dsh-tool-fs`'s `FsMutationSandbox` so every file-effect family in this shell
  * escalates identically and a denial reads the same to the model.
  *
- * Why the fence is needed at all: the vendored git implementation writes through
- * `node:fs`, so `fs-sandbox`'s per-call `checkedTarget` never sees those writes. The
- * containment check therefore happens once, on the repository root, before any I/O:
+ * 112-cli-integration（FR-112-4 修订）：isomorphic-git 的 `fs` 适配层已删除，`open()` 只返回
+ * 仓库根与策略；`isWithin` 随围栏保留（`git` passthrough 用同一个谓词裁决 `-C` 越界）。
+ *
+ * Why the fence is needed at all: `git` runs as an independent process, so the `fs-sandbox`'s
+ * per-call `checkedTarget` never sees its `.git` writes — the containment check therefore
+ * happens once, on the repository root, before any I/O:
  *
  * > a repository inside the session workspace runs freely; a repository outside it is refused
  * > with the shared denial marker until the user approves a one-shot escalation.
@@ -28,10 +31,26 @@ import {
   sandboxDenialMarker,
   validateEscalationArgs,
 } from '@deepseek-ai/dsh-sandbox'
-import { createRepositoryFs, isWithin } from './fs-adapter.js'
+import { normalize, resolve, sep } from 'node:path'
 
 /** A path segment that traverses to a parent, in either separator dialect. */
 const PARENT_PATH_SEGMENT = /(?:^|[\\/])\.\.(?:[\\/]|$)/
+
+/**
+ * Whether a candidate path lies inside a root, on a path-segment boundary.
+ * @param root - absolute root path.
+ * @param candidate - absolute candidate path.
+ * @returns true when `candidate` is `root` or below it.
+ */
+export function isWithin(root, candidate) {
+  // Windows paths compare case-insensitively; folding keeps a lexically-correct path from being
+  // refused as if it were outside (fail-closed, but a false rejection is still a bug).
+  const fold = value => (process.platform === 'win32' ? value.toLowerCase() : value)
+  const base = fold(normalize(resolve(root)))
+  const other = fold(normalize(resolve(candidate)))
+  if (base === other) return true
+  return other.startsWith(base.endsWith(sep) ? base : base + sep)
+}
 
 /**
  * Per-call memory of a resolved sandbox policy, keyed on the tool call's own `exec` object.
@@ -39,22 +58,6 @@ const PARENT_PATH_SEGMENT = /(?:^|[\\/])\.\.(?:[\\/]|$)/
  * @type {WeakMap<object, object | undefined>}
  */
 const resolvedPolicies = new WeakMap()
-
-/**
- * Whether an error means "there is no repository here".
- *
- * Measured against isomorphic-git 1.44.2, which reports a missing repository as
- * `NotFoundError: Could not find HEAD.` — while a *missing file* is also a `NotFoundError`
- * (`Could not find x.txt.`). Only the HEAD wording may be re-labelled as "not a repository";
- * widening it would tell the model to run `git_init` when it merely mistyped a path.
- *
- * @param error - the thrown error.
- * @returns true when the error says the repository itself is absent.
- */
-function isMissingRepository(error) {
-  if (!(error instanceof Error) || error.code !== 'NotFoundError') return false
-  return typeof error.message === 'string' && /^Could not find HEAD\.?$/i.test(error.message.trim())
-}
 
 /**
  * The calling agent's per-session workspace cwd, or `undefined` for an agent-less call (the
@@ -71,16 +74,14 @@ function sessionCwd(exec, requestedPath) {
 }
 
 /**
- * An opened repository: its root, the policy the call runs under, and the confined `fs`
- * adapter every isomorphic-git call for this tool invocation must use.
+ * An opened repository: its root and the policy the call runs under.
  * @typedef {object} OpenedRepository
  * @property {string} root - absolute repository root in the host process's filesystem.
- * @property {object} fs - the `fs` object handed to isomorphic-git, confined to `root`.
  * @property {object | undefined} policy - the sandbox policy stamped on the call, when a confining backend is mounted.
  */
 
 /**
- * The escalation API for the git tools: advertisement gating, per-call policy resolution, the
+ * The escalation API for the git tool: advertisement gating, per-call policy resolution, the
  * one-approved wider retry, denial-marker mapping, and repository-root vetting.
  */
 export class GitRepositoryFence {
@@ -102,11 +103,10 @@ export class GitRepositoryFence {
   /**
    * The escalation parameter specs, or `{}` when no confining backend is mounted.
    *
-   * Advertised on **every** repository-touching tool rather than on a hand-picked "write" list:
-   * read-shaped operations (`status` refreshes the index, `fetch` writes objects) mutate `.git`
-   * too, and a per-tool judgment call that misses one would leave a tool that can never be
-   * granted the access it needs.
-   * @returns the two parameter specs to spread into a tool's `parameters`.
+   * Advertised on the repository-touching tool rather than omitted: read-shaped operations
+   * (`status` refreshes the index, `fetch` writes objects) mutate `.git` too, and the fence is
+   * the only containment `git`'s own process writes get.
+   * @returns the two parameter specs to spread into the tool's `parameters`.
    */
   escalationFields() {
     if (this.escalationModes.length === 0) return {}
@@ -136,7 +136,7 @@ export class GitRepositoryFence {
    */
   async resolvePolicy(toolName, args, exec) {
     // One call resolves its policy exactly once. Without this memo the denial path resolves it
-    // twice: `open()` resolves the policy and only then may refuse, while every tool's catch asks
+    // twice: `open()` resolves the policy and only then may refuse, while the tool's catch asks
     // again for a policy to report with — so a denied call would put a **second** approval panel
     // in front of the user, and a second refusal would replace the `[sandbox: …]` marker with a
     // generic error. The memo is keyed on `exec`, which is a fresh object per tool call, so it is
@@ -176,9 +176,9 @@ export class GitRepositoryFence {
   /**
    * Map a thrown provider error for the model. A `FS_SANDBOX_DENIED` becomes an `FsError`
    * whose text is the shared `[sandbox: …]` denial marker plus the same-turn escalation hint,
-   * so the model can retry with the fields the tools advertise; the structured code is
+   * so the model can retry with the fields the tool advertises; the structured code is
    * preserved because `ToolRuntime` populates `result.error` only for `HarnessError` instances.
-   * @param error - the error thrown by an operation.
+   * @param error - the error thrown by a git operation.
    * @param policy - the policy stamped onto the call; names the mode in the marker.
    * @returns the marker `FsError` for a sandbox denial, else the original error.
    */
@@ -191,15 +191,6 @@ export class GitRepositoryFence {
         { cause: error },
       )
     }
-    // §13 promises that "the target is not a git repository" is explained and names the fix, and
-    // the library's own text ("Could not find HEAD.") does not. Mapping it here keeps that promise
-    // in one place instead of in twenty-one catches.
-    if (isMissingRepository(error)) {
-      return new Error(
-        '@dsh-android/git: this directory is not a git repository. Use git_init to create one '
-        + 'here, or git_clone to fetch an existing one.',
-      )
-    }
     return error
   }
 
@@ -207,16 +198,16 @@ export class GitRepositoryFence {
    * Vet a requested repository directory and open it for this call.
    *
    * Resolution goes through `ctx.fs` so the path means the same thing it means everywhere else
-   * in dsh (session cwd, backend identity), and `processPath` yields the absolute path
-   * `node:fs` can open in this process. Containment is then decided against the workspace root
-   * the policy names — or skipped entirely under `danger-full-access`, which is exactly what an
-   * approved escalation grants.
+   * in dsh (session cwd, backend identity), and `processPath` yields the absolute path the host
+   * process can hand to `git`. Containment is then decided against the workspace root the policy
+   * names — or skipped entirely under `danger-full-access`, which is exactly what an approved
+   * escalation grants.
    *
    * @param toolName - the calling tool's name, for the approval audit trail.
    * @param args - the call's escalation arguments.
    * @param exec - the tool-execution context.
    * @param requestedDir - the directory the model named.
-   * @returns the opened repository.
+   * @returns the opened repository root and policy.
    * @throws FsError with code `FS_SANDBOX_DENIED` when a confining backend denies the root.
    */
   async open(toolName, args, exec, requestedDir) {
@@ -242,6 +233,6 @@ export class GitRepositoryFence {
       throw refusal
     }
 
-    return { root, fs: createRepositoryFs(root), policy }
+    return { root, policy }
   }
 }

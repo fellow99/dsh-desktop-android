@@ -52,7 +52,7 @@ export function hasUserinfo(url) {
 /**
  * Redact a raw URL inside an error message.
  *
- * isomorphic-git and the HTTP layer sometimes quote the address they contacted, and those
+ * the HTTP layer and `git`'s own error text sometimes quote the address they contacted, and those
  * messages are re-thrown to the model as-is (the fence preserves an error it cannot classify).
  * When — and only when — the message really contains the raw address, the text is rewritten and
  * the error's identity (`name`, `code`, `data`) is carried over so downstream classification

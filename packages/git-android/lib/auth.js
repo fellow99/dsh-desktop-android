@@ -72,7 +72,7 @@ export function credentialRefForUrl(url) {
 }
 
 /**
- * Split a stored value into the two fields isomorphic-git's auth callback wants. The split is
+ * Split a stored value into the two fields the credential file and `git` itself want. The split is
  * on the **first** colon, so a password may contain colons.
  * @param value - the stored `<username>:<password>` value.
  * @returns the parsed pair, or `undefined` when the value carries no colon.
@@ -176,32 +176,5 @@ export class GitCredentials {
       + `Update them in Settings → Git 凭据 (or ${gitCredentialsPath()}), then retry.`
   }
 
-  /**
-   * Build isomorphic-git's auth callbacks for this family of tools.
-   *
-   * `onAuthFailure` deliberately allows **one** re-supply of the same stored credential and then
-   * cancels: a wrong password must surface as a clear rejection instead of a retry loop against
-   * the server. isomorphic-git calls `onAuth` again after `onAuthFailure` returns auth, so the
-   * attempt is tracked here.
-   *
-   * @param url - the remote URL for this operation.
-   * @returns the `onAuth` / `onAuthFailure` pair to spread into a git call.
-   */
-  callbacks(url) {
-    let retried = false
-    return {
-      onAuth: async () => {
-        const found = await this.lookup(url)
-        if (found === undefined) return { cancel: true }
-        return found
-      },
-      onAuthFailure: async () => {
-        if (retried) return { cancel: true }
-        retried = true
-        const found = await this.lookup(url)
-        if (found === undefined) return { cancel: true }
-        return found
-      },
-    }
-  }
 }
+
