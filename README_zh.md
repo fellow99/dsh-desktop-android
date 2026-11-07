@@ -4,7 +4,7 @@
 
 **DSH Desktop（Android 版）** — 在 Android 上以「进程内 Node + 系统 WebView」运行 [deepseek-harness](../deepseek-harness)（dsh）的桌面交付。
 
-- **版本**：0.2.1（`versionCode` 201）｜ 上游基线 `dsh-v0.2.1-rc.5` ｜ 引擎 libnode **v26.13.0**（small-icu）
+- **版本**：0.2.2（`versionCode` 202）｜ 上游基线 `dsh-v0.2.2-rc.1` ｜ 引擎 libnode **v26.13.0**（small-icu）
 - **技术栈**：Kotlin（View 体系）· 系统 WebView · 进程内 `libnode.so`（`node::Start`，JNI 槽位表桥）· dsh Host（HTTP + WebSocket）
 - **适配原则**：上游**零补丁** —— `android` profile + `@dsh-android/bundle`（三类 patch 操作）+ 带标记垫片/物化期补丁 + 自建 seam 插件（`packages/*-android`）
 

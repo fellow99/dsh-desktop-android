@@ -5,7 +5,7 @@ English | [中文](./README_zh.md)
 **DSH Desktop (Android Edition)** — runs [deepseek-harness](../deepseek-harness) (dsh) on Android as a
 desktop delivery with an **in-process Node + the system WebView**.
 
-- **Version**: 0.2.1 (`versionCode` 201) ｜ upstream baseline `dsh-v0.2.1-rc.5` ｜ engine libnode **v26.13.0** (small-icu)
+- **Version**: 0.2.2 (`versionCode` 202) ｜ upstream baseline `dsh-v0.2.2-rc.1` ｜ engine libnode **v26.13.0** (small-icu)
 - **Stack**: Kotlin (View system) · system WebView · in-process `libnode.so` (`node::Start`, JNI slot-table bridge) · dsh Host (HTTP + WebSocket)
 - **Adaptation principle**: **zero upstream patches** — `android` profile + `@dsh-android/bundle` (three kinds of patch operations) + tagged shims/materialization-time patches + bespoke seam plugins (`packages/*-android`)
 
