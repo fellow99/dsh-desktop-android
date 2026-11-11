@@ -2,9 +2,12 @@ package org.fellow99.dsh.android
 
 import android.app.Activity
 import android.content.res.Configuration
+import android.os.Build
 import android.os.Bundle
 import org.fellow99.dsh.android.host.HostCapabilities
 import android.view.KeyEvent
+import android.view.View
+import android.view.WindowInsets
 import org.fellow99.dsh.android.runtime.DshRuntime
 import org.fellow99.dsh.android.ui.WebShellView
 
@@ -20,6 +23,8 @@ class MainActivity : Activity() {
         super.onCreate(savedInstanceState)
         shell = WebShellView(this)
         setContentView(shell)
+        // 113-system-back：内容不占用系统顶部状态栏/底部导航区；全面屏（挖孔/手势条）同步适配安全区。
+        installSystemBarInsets()
 
         DshRuntime.setListener { phase, url ->
             when (phase) {
@@ -75,9 +80,48 @@ class MainActivity : Activity() {
         HostCapabilities.onRequestPermissionsResult(requestCode, grantResults)
     }
 
+    /**
+     * 113-system-back：内容不占用系统顶部状态栏/底部导航区；全面屏（挖孔/手势条）同步适配安全区。
+     *
+     * API 30+：显式 `setDecorFitsSystemWindows(false)` 进入 edge-to-edge（兼容 Android 15/16 强制
+     * edge-to-edge），再由监听器按 systemBars()+displayCutout() insets 给根视图垫安全区；
+     * API 26–29：LAYOUT_* flag + `systemWindowInset*` 回退。不引入 androidx 依赖。
+     */
+    private fun installSystemBarInsets() {
+        val decor = window.decorView
+        if (Build.VERSION.SDK_INT >= 30) {
+            window.setDecorFitsSystemWindows(false)
+        } else {
+            decor.systemUiVisibility = decor.systemUiVisibility or
+                View.SYSTEM_UI_FLAG_LAYOUT_STABLE or
+                View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN or
+                View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
+        }
+        shell.setOnApplyWindowInsetsListener { view, insets ->
+            val l: Int
+            val t: Int
+            val r: Int
+            val b: Int
+            if (Build.VERSION.SDK_INT >= 30) {
+                val system = insets.getInsets(WindowInsets.Type.systemBars() or WindowInsets.Type.displayCutout())
+                l = system.left; t = system.top; r = system.right; b = system.bottom
+            } else {
+                l = insets.systemWindowInsetLeft
+                t = insets.systemWindowInsetTop
+                r = insets.systemWindowInsetRight
+                b = insets.systemWindowInsetBottom
+            }
+            view.setPadding(l, t, r, b)
+            insets
+        }
+        shell.requestApplyInsets()
+    }
+
     @Deprecated("Deprecated in Java")
     override fun onBackPressed() {
-        if (shell.canGoBack()) shell.goBack() else super.onBackPressed()
+        // 113-system-back：系统返回键统一交 Web UI seam（window.__dshSystemBack）按上下文处理：
+        // 设置页/抽屉/弹窗关闭；首页/会话页无操作；**永不** finish() 退桌面，也不用 WebView 历史后退。
+        shell.handleSystemBack()
     }
 
     override fun onKeyDown(keyCode: Int, event: KeyEvent?): Boolean {

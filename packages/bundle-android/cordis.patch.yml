@@ -112,6 +112,9 @@
     # 响应式 UI（111 后续）：窄屏下把设置对话框左侧栏目改成顶部横向 tab 条（纯 CSS 注入，上游零补丁）。
     - id: ui-responsive-android
       name: '@dsh-android/ui-responsive'
+    # 系统返回 seam（113-system-back）：Web UI 内设置页/弹窗关闭、抽屉收回、首页/会话页无操作。
+    - id: back-android
+      name: '@dsh-android/back'
 
 # ── 审批预设：需要"可隔离的执行器"（ctx.shell.sandboxMode 非空）。
 #    Android 没有内核隔离，执行器如实不声明 sandboxMode；上游 permission-presets

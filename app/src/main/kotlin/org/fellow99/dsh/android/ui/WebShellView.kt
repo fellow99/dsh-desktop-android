@@ -235,6 +235,20 @@ class WebShellView(context: Context) : FrameLayout(context) {
         webView?.goBack()
     }
 
+    /**
+     * 113-system-back：系统返回 → Web UI seam（window.__dshSystemBack）。
+     * seam 由 `@dsh-android/back` 经 webserver/index-inject 注入 dsh Web UI；
+     * 未就绪（webView 未建/加载中/错误页）时静默无操作 —— 返回键在壳层**总是被消费**
+     * （不退出应用，见 specs/113-system-back FR-113-2/4）。
+     */
+    fun handleSystemBack() {
+        val wv = webView ?: return
+        wv.evaluateJavascript(
+            "(window.__dshSystemBack ? window.__dshSystemBack() : false)",
+            null
+        )
+    }
+
     private fun copyDiagnostics() {
         val text = buildString {
             append("phase=").append(lastUrl?.let { "webview" } ?: "unknown").append('\n')

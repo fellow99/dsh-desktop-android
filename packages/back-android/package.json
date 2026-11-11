@@ -1,0 +1,18 @@
+{
+  "name": "@dsh-android/back",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "DSH Desktop（Android 版）系统返回键 seam：Web UI 内设置页/弹窗关闭、抽屉收回、首页/会话页无操作（webserver/index-inject 注入，上游零补丁）。",
+  "main": "lib/index.js",
+  "exports": {
+    ".": {
+      "default": "./lib/index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "lib/"
+  ],
+  "license": "MIT"
+}
