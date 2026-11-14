@@ -101,3 +101,10 @@
 | `app/src/main/res/mipmap-*/ic_launcher_round.png` | 圆形图标 |
 | `app/src/main/res/drawable-*/ic_stat_dsh.png` | 通知小图标 |
 | `packages/branding-android/` | Web 品牌位（205，不在本模块实现） |
+
+## 9. r2 修订（包名）
+
+- `namespace`/`applicationId`/源码包路径 由 `org.fellow99.dsh.android` 改为 `top.fellow99.dsh.DshDesktopAndroid`。
+- 源码目录 `app/src/main/kotlin/org/fellow99/dsh/android` → `app/src/main/kotlin/top/fellow99/dsh/DshDesktopAndroid`（`common/host/runtime/ui` 子包不变）。
+- 生成的 `R` / `BuildConfig` 随之位于 `top.fellow99.dsh.DshDesktopAndroid`，相关 `import` 同步更新。
+- Manifest 仅用相对组件名（`.DshApplication` 等），随 namespace 自动解析，无需改动。

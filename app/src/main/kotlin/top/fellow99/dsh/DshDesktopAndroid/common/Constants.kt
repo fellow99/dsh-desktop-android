@@ -1,4 +1,4 @@
-package org.fellow99.dsh.android.common
+package top.fellow99.dsh.DshDesktopAndroid.common
 
 /**
  * 单一事实源：路径 / 超时 / 能力名（docs/000-工程规划.md §6.2 关键参数、§8.1 布局）。

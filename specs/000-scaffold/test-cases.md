@@ -7,7 +7,7 @@
 
 ```bash
 adb install -r app/build/outputs/apk/full/debug/app-full-debug.apk
-adb shell am start -n org.fellow99.dsh.android/.MainActivity
+adb shell am start -n top.fellow99.dsh.DshDesktopAndroid/.MainActivity
 adb logcat -s DSH_ANDROID NODE_BRIDGE -v time
 ```
 
@@ -21,7 +21,7 @@ adb logcat -s DSH_ANDROID NODE_BRIDGE -v time
 ## TC-000-03 引擎证据（G12 / G3min）
 
 ```bash
-adb shell run-as org.fellow99.dsh.android cat files/probe/engine.json
+adb shell run-as top.fellow99.dsh.DshDesktopAndroid cat files/probe/engine.json
 ```
 
 判据：JSON 含 dlopen/libnode 成功标志（桥 probeEngine 输出）；`bootstrap.js` 已执行（探针页存在即证）。

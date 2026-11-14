@@ -22,7 +22,7 @@ dsh-desktop-android/
 │   └── src/
 │       ├── main/
 │       │   ├── AndroidManifest.xml     # singleTask / 权限 / networkSecurityConfig
-│       │   ├── kotlin/org/fellow99/dsh/android/
+│       │   ├── kotlin/top/fellow99/dsh/DshDesktopAndroid/
 │       │   │   ├── DshApplication.kt           # 日志初始化 + 未捕获异常兜底
 │       │   │   ├── MainActivity.kt             # 唯一 Activity（singleTask）→ WebShellView
 │       │   │   ├── common/Constants.kt         # 路径/超时/能力名单一事实源
@@ -50,7 +50,7 @@ dsh-desktop-android/
 └── specs/                              # 本目录（规范文档）
 ```
 
-## 运行期数据目录（设备上，`<filesDir>` = /data/user/0/org.fellow99.dsh.android/files）
+## 运行期数据目录（设备上，`<filesDir>` = /data/user/0/top.fellow99.dsh.DshDesktopAndroid/files）
 
 ```
 <filesDir>/

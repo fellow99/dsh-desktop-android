@@ -1,4 +1,4 @@
-package org.fellow99.dsh.android.runtime
+package top.fellow99.dsh.DshDesktopAndroid.runtime
 
 import java.net.HttpURLConnection
 import java.net.URL

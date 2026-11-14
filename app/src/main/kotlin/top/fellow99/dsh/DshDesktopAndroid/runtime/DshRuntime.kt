@@ -1,11 +1,11 @@
-package org.fellow99.dsh.android.runtime
+package top.fellow99.dsh.DshDesktopAndroid.runtime
 
 import android.app.Application
 import android.os.Environment
-import org.fellow99.dsh.android.BuildConfig
-import org.fellow99.dsh.android.common.AppLog
-import org.fellow99.dsh.android.common.Constants
-import org.fellow99.dsh.android.host.HostCapabilities
+import top.fellow99.dsh.DshDesktopAndroid.BuildConfig
+import top.fellow99.dsh.DshDesktopAndroid.common.AppLog
+import top.fellow99.dsh.DshDesktopAndroid.common.Constants
+import top.fellow99.dsh.DshDesktopAndroid.host.HostCapabilities
 import org.fellow99.nodebridge.NodeRuntime
 import org.fellow99.nodebridge.NodeRuntimeOptions
 import org.fellow99.nodebridge.NodeState

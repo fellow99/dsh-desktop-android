@@ -1,4 +1,4 @@
-package org.fellow99.dsh.android.host
+package top.fellow99.dsh.DshDesktopAndroid.host
 
 import android.content.ContentProvider
 import android.content.ContentValues
@@ -12,7 +12,7 @@ import java.io.File
  * 工作区文件共享 Provider（T-005 / specs P3 FileProvider 路线，零 androidx 自建）。
  *
  * 目的：外部应用无法读应用私有目录，`file://` 又被 Android 33+ 禁止暴露 ——
- * 以 `content://org.fellow99.dsh.android.workspacefiles/<相对路径>` 暴露**工作区内**
+ * 以 `content://top.fellow99.dsh.DshDesktopAndroid.workspacefiles/<相对路径>` 暴露**工作区内**
  * 的文件，配合 `FLAG_GRANT_READ_URI_PERMISSION` 供 ACTION_VIEW 打开。
  *
  * 安全边界（enforcement point，不是约定）：
@@ -24,7 +24,7 @@ import java.io.File
 class WorkspaceFilesProvider : ContentProvider() {
 
     companion object {
-        const val AUTHORITY = "org.fellow99.dsh.android.workspacefiles"
+        const val AUTHORITY = "top.fellow99.dsh.DshDesktopAndroid.workspacefiles"
         private val COLUMNS = arrayOf(OpenableColumns.DISPLAY_NAME, OpenableColumns.SIZE)
 
         /** 把工作区内绝对路径转 content URI；越界返回 null（调用方如实降级）。 */

@@ -3,6 +3,7 @@
 > Module: 013-branding
 > Status: Implemented（as-built；模拟器/源码证据；真机回归待做）
 > Last Updated: 2026-11-01
+> 修订 r2（包名）：包名纳入本模块登记，`namespace`/`applicationId`/源码包路径改为 `top.fellow99.dsh.DshDesktopAndroid`（r2 前为 `org.fellow99.dsh.android`）。版本号/签名/上架仍属 `108-compliance-release` / `012-building-workflow`。
 
 ## 1. 模块概述
 
@@ -28,7 +29,7 @@
 **不包含：**
 
 - Web UI 内部品牌位（侧栏 logo/名称、hero、document title）——由 `205-plugin-branding` 实现。
-- 应用包名 `org.fellow99.dsh.android`、版本号、签名与上架（属 `108-compliance-release`）。
+- 应用包名 `top.fellow99.dsh.DshDesktopAndroid`（r2 起由本模块登记）、版本号、签名与上架（版本号/签名/上架属 `108-compliance-release`）。
 - 商店 listing 文案、截图。
 
 ## 2. 用户故事
@@ -43,7 +44,7 @@
 
 - FR-013-001：`app/src/main/res/values/strings.xml` 的 `app_name` MUST 为 `DSH Desktop`。
 - FR-013-002：`AndroidManifest.xml` 的 `android:label` MUST 引用 `@string/app_name`。
-- FR-013-003：应用包名、`versionName`、`versionCode` MUST 由 `108-compliance-release` / `012-building-workflow` 管理，本模块不修改。
+- FR-013-003：应用 `namespace`/`applicationId`/源码包路径 MUST 为 `top.fellow99.dsh.DshDesktopAndroid`（r2）；`versionName`、`versionCode` MUST 由 `108-compliance-release` / `012-building-workflow` 管理。
 
 ### 3.2 启动图标
 
@@ -102,11 +103,11 @@
 ## 7. 假设与约束
 
 - 假设 `assets/logo.png` 为透明底、#1296db 品牌气泡，尺寸满足缩放。
-- 约束：不修改包名与签名材料；不实现 Web 品牌位（属 205）。
+- 约束：包名由本模块登记（r2）；不修改签名材料；不实现 Web 品牌位（属 205）。
 - 约束：通知小图标必须符合 Android 白色剪影规范。
 
 ## 8. 依赖
 
 - 物料：父工程 `assets/logo.png`。
 - 工具：Python 3 + Pillow。
-- 下游：`205-plugin-branding`（Web 品牌位）、`108-compliance-release`（包名/版本/签名）。
+- 下游：`205-plugin-branding`（Web 品牌位）、`108-compliance-release`（签名/版本）。

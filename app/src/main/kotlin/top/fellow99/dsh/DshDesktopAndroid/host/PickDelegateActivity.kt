@@ -1,10 +1,10 @@
-package org.fellow99.dsh.android.host
+package top.fellow99.dsh.DshDesktopAndroid.host
 
 import android.app.Activity
 import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
-import org.fellow99.dsh.android.common.AppLog
+import top.fellow99.dsh.DshDesktopAndroid.common.AppLog
 import java.io.File
 import org.json.JSONObject
 

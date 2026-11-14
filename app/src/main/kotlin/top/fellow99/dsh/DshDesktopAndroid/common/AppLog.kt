@@ -1,4 +1,4 @@
-package org.fellow99.dsh.android.common
+package top.fellow99.dsh.DshDesktopAndroid.common
 
 import android.content.Context
 import android.util.Log

@@ -9,7 +9,7 @@
 ## 1. 分层
 
 ```
-┌─ APK（applicationId: org.fellow99.dsh.android，arm64-v8a）──────────────┐
+┌─ APK（applicationId: top.fellow99.dsh.DshDesktopAndroid，arm64-v8a）──────────────┐
 │                                                                        │
 │  Kotlin 外壳（:app，唯一应用模块）                                       │
 │  ┌──────────────────────────────────────────────────────────────────┐  │

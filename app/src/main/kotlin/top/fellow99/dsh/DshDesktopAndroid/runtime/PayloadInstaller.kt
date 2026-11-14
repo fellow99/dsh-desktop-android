@@ -1,8 +1,8 @@
-package org.fellow99.dsh.android.runtime
+package top.fellow99.dsh.DshDesktopAndroid.runtime
 
 import android.app.Application
-import org.fellow99.dsh.android.common.AppLog
-import org.fellow99.dsh.android.common.Constants
+import top.fellow99.dsh.DshDesktopAndroid.common.AppLog
+import top.fellow99.dsh.DshDesktopAndroid.common.Constants
 import java.io.BufferedInputStream
 import java.io.File
 import java.security.DigestInputStream

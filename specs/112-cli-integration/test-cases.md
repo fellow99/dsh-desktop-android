@@ -28,8 +28,8 @@
 **Precondition**: 应用安装完成
 **Steps**:
 1. adb 启动应用，等待 READY
-2. `adb shell run-as org.fellow99.dsh.android ls nativeLibraryDir`（.so 实体）
-3. `adb shell run-as org.fellow99.dsh.android ls <filesDir>/payload/<sha12>/dsh/cli-data`（数据物化）
+2. `adb shell run-as top.fellow99.dsh.DshDesktopAndroid ls nativeLibraryDir`（.so 实体）
+3. `adb shell run-as top.fellow99.dsh.DshDesktopAndroid ls <filesDir>/payload/<sha12>/dsh/cli-data`（数据物化）
 4. `curl /_android/facts` 查看 cli 探针字段
 **Expected**: `.so` 实体在 nativeLibraryDir；cli-data 物化；facts 上报各工具版本或「缺失」（结构化，C2）
 **Actual**:

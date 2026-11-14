@@ -14,13 +14,13 @@ val keystoreProps = Properties().apply {
 }
 
 android {
-    namespace = "org.fellow99.dsh.android"
+    namespace = "top.fellow99.dsh.DshDesktopAndroid"
     compileSdk = 36
     // 本机已装 36.0.0；避免 AGP 自动下载 35.x（SDK 下载器不走代理会拿到坏包）
     buildToolsVersion = "36.0.0"
 
     defaultConfig {
-        applicationId = "org.fellow99.dsh.android"
+        applicationId = "top.fellow99.dsh.DshDesktopAndroid"
         minSdk = 26
         targetSdk = 36
         // 012-building-workflow：发行版本由 CI 从 tag 注入（-PappVersionName/-PappVersionCode）；

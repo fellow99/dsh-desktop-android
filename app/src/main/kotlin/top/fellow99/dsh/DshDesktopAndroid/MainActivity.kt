@@ -1,15 +1,15 @@
-package org.fellow99.dsh.android
+package top.fellow99.dsh.DshDesktopAndroid
 
 import android.app.Activity
 import android.content.res.Configuration
 import android.os.Build
 import android.os.Bundle
-import org.fellow99.dsh.android.host.HostCapabilities
+import top.fellow99.dsh.DshDesktopAndroid.host.HostCapabilities
 import android.view.KeyEvent
 import android.view.View
 import android.view.WindowInsets
-import org.fellow99.dsh.android.runtime.DshRuntime
-import org.fellow99.dsh.android.ui.WebShellView
+import top.fellow99.dsh.DshDesktopAndroid.runtime.DshRuntime
+import top.fellow99.dsh.DshDesktopAndroid.ui.WebShellView
 
 /**
  * 唯一 Activity（singleTask）：装配 WebShellView、驱动 DshRuntime；

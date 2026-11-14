@@ -1,4 +1,4 @@
-package org.fellow99.dsh.android.ui
+package top.fellow99.dsh.DshDesktopAndroid.ui
 
 import android.annotation.SuppressLint
 import android.content.ClipData
@@ -26,9 +26,9 @@ import android.widget.ProgressBar
 import android.widget.ScrollView
 import android.widget.TextView
 import android.widget.Toast
-import org.fellow99.dsh.android.BuildConfig
-import org.fellow99.dsh.android.common.AppLog
-import org.fellow99.dsh.android.common.Constants
+import top.fellow99.dsh.DshDesktopAndroid.BuildConfig
+import top.fellow99.dsh.DshDesktopAndroid.common.AppLog
+import top.fellow99.dsh.DshDesktopAndroid.common.Constants
 
 /**
  * WebShellView（§6.3 配置矩阵逐项落实）：

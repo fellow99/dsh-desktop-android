@@ -1,10 +1,10 @@
-package org.fellow99.dsh.android
+package top.fellow99.dsh.DshDesktopAndroid
 
 import android.app.Activity
 import android.app.Application
 import android.os.Bundle
-import org.fellow99.dsh.android.common.AppLog
-import org.fellow99.dsh.android.host.HostCapabilities
+import top.fellow99.dsh.DshDesktopAndroid.common.AppLog
+import top.fellow99.dsh.DshDesktopAndroid.host.HostCapabilities
 
 /**
  * Application 级单例宿主：初始化业务日志 + 全局未捕获异常兜底（R3：先落盘再交还默认处理）。

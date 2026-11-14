@@ -1,4 +1,4 @@
-package org.fellow99.dsh.android.host
+package top.fellow99.dsh.DshDesktopAndroid.host
 
 import android.app.Notification
 import android.app.NotificationChannel
@@ -9,8 +9,8 @@ import android.content.Intent
 import android.content.pm.ServiceInfo
 import android.os.Build
 import android.os.IBinder
-import org.fellow99.dsh.android.R
-import org.fellow99.dsh.android.common.AppLog
+import top.fellow99.dsh.DshDesktopAndroid.R
+import top.fellow99.dsh.DshDesktopAndroid.common.AppLog
 
 /**
  * AgentKeepAlive（specs/109）：turn 运行期 dataSync 前台服务保活，turn 结束即停。

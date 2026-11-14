@@ -7,7 +7,7 @@
 ## 一、问题陈述
 
 ### 1.1 系统返回键
-当前 `MainActivity.onBackPressed()`（app/src/main/kotlin/org/fellow99/dsh/android/MainActivity.kt）：
+当前 `MainActivity.onBackPressed()`（app/src/main/kotlin/top/fellow99/dsh/DshDesktopAndroid/MainActivity.kt）：
 
 ```kotlin
 override fun onBackPressed() {

@@ -1,4 +1,4 @@
-package org.fellow99.dsh.android.host
+package top.fellow99.dsh.DshDesktopAndroid.host
 
 import android.Manifest
 import android.app.Activity
@@ -9,12 +9,12 @@ import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Intent
 import android.content.pm.PackageManager
-import org.fellow99.dsh.android.R
+import top.fellow99.dsh.DshDesktopAndroid.R
 import android.os.Build
 import android.os.Environment
-import org.fellow99.dsh.android.BuildConfig
-import org.fellow99.dsh.android.common.AppLog
-import org.fellow99.dsh.android.common.Constants
+import top.fellow99.dsh.DshDesktopAndroid.BuildConfig
+import top.fellow99.dsh.DshDesktopAndroid.common.AppLog
+import top.fellow99.dsh.DshDesktopAndroid.common.Constants
 import org.fellow99.nodebridge.NodeRuntime
 import org.json.JSONObject
 import java.io.File
