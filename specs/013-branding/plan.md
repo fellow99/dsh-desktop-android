@@ -104,7 +104,7 @@
 
 ## 9. r2 修订（包名）
 
-- `namespace`/`applicationId`/源码包路径 由 `org.fellow99.dsh.android` 改为 `top.fellow99.dsh.DshDesktopAndroid`。
-- 源码目录 `app/src/main/kotlin/org/fellow99/dsh/android` → `app/src/main/kotlin/top/fellow99/dsh/DshDesktopAndroid`（`common/host/runtime/ui` 子包不变）。
+- `namespace`/`applicationId`/源码包路径现为 `top.fellow99.dsh.DshDesktopAndroid`。
+- 源码目录现为 `app/src/main/kotlin/top/fellow99/dsh/DshDesktopAndroid`（`common/host/runtime/ui` 子包不变）。
 - 生成的 `R` / `BuildConfig` 随之位于 `top.fellow99.dsh.DshDesktopAndroid`，相关 `import` 同步更新。
 - Manifest 仅用相对组件名（`.DshApplication` 等），随 namespace 自动解析，无需改动。

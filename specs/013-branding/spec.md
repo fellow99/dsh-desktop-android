@@ -3,7 +3,7 @@
 > Module: 013-branding
 > Status: Implemented（as-built；模拟器/源码证据；真机回归待做）
 > Last Updated: 2026-11-01
-> 修订 r2（包名）：包名纳入本模块登记，`namespace`/`applicationId`/源码包路径改为 `top.fellow99.dsh.DshDesktopAndroid`（r2 前为 `org.fellow99.dsh.android`）。版本号/签名/上架仍属 `108-compliance-release` / `012-building-workflow`。
+> 修订 r2（包名）：包名纳入本模块登记，`namespace`/`applicationId`/源码包路径改为 `top.fellow99.dsh.DshDesktopAndroid`。版本号/签名/上架仍属 `108-compliance-release` / `012-building-workflow`。
 
 ## 1. 模块概述
 
